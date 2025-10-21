@@ -4,8 +4,8 @@ use anchor_lang::prelude::*;
 pub enum ErrorCode {
     #[msg("Invalid reward vault address")]
     InvalidRewardVault,
-    #[msg("League is already closed")]
-    LeagueAlreadyClosed,
+    #[msg("League is not active")]
+    LeagueNotActive,
     #[msg("Insufficient entry amount")]
     InsufficientEntryAmount,
     #[msg("Invalid entry token mint")]
@@ -16,4 +16,10 @@ pub enum ErrorCode {
     NotAdmin,
     #[msg("Market already exists")]
     MarketAlreadyExists,
+    #[msg("Invalid status")]
+    InvalidStatus,
+    #[msg("Start time not reached")]
+    StartTimeNotReached,
+    #[msg("Not creator")]
+    NotCreator,
 }

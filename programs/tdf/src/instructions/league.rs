@@ -2,11 +2,11 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{Token, Transfer};
 
-use crate::state::{League, LeagueMemberDeposit};
+use crate::state::{League, LeagueMemberDeposit, LeagueStatus};
 
 /// Market is bounded to 10
 #[derive(Accounts)]
-#[instruction(start_ts: u64, end_ts: u64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String)]
+#[instruction(start_ts: i64, end_ts: i64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String, max_participants: u32)]
 pub struct CreateLeague<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -14,7 +14,7 @@ pub struct CreateLeague<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + (4 + 32 * 10) + 8 + 8 + 32 + 8 + 32 + (4 + 200) + 1 + 1,
+        space = 8 + 32 + (4 + 32 * 10) + 8 + 8 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 1,
         seeds = [b"league", creator.key().as_ref(), &start_ts.to_le_bytes()],
         bump
     )]
@@ -34,11 +34,12 @@ pub struct CreateLeague<'info> {
 
 pub fn create_league(
     ctx: Context<CreateLeague>,
-    start_ts: u64,
-    end_ts: u64,
+    start_ts: i64,
+    end_ts: i64,
     entry_amount: u64,
     markets: Vec<Pubkey>,
     metadata_uri: String,
+    max_participants: u32,
 ) -> Result<()> {
     // Validate markets vector size (max 10 markets)
     require!(
@@ -96,7 +97,8 @@ pub fn create_league(
 
     league.reward_vault = ctx.accounts.reward_vault.key();
     league.metadata_uri = metadata_uri;
-    league.is_closed = false;
+    league.status = LeagueStatus::Pending;
+    league.max_participants = max_participants;
     league.bump = bump;
 
     msg!("League created: {:?}", league.key());
@@ -142,8 +144,8 @@ pub struct JoinLeague<'info> {
 pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
     let league = &ctx.accounts.league;
     require!(
-        !league.is_closed,
-        crate::errors::ErrorCode::LeagueAlreadyClosed
+        league.status == LeagueStatus::Active,
+        crate::errors::ErrorCode::LeagueNotActive
     );
     require!(
         amount >= league.entry_amount,
@@ -166,5 +168,73 @@ pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
     anchor_spl::token::transfer(cpi_ctx, amount)?;
 
     msg!("User joined league: {:?}", league.key());
+    Ok(())
+}
+
+
+#[derive(Accounts)]
+pub struct StartLeague<'info> {
+    #[account(mut)]
+    pub league: Account<'info, League>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+pub fn start_league(ctx: Context<StartLeague>) -> Result<()> {
+    let league = &mut ctx.accounts.league;
+
+    // 상태 체크: Pending만 시작 가능
+    require!(
+        league.status == LeagueStatus::Pending,
+        crate::errors::ErrorCode::InvalidStatus
+    );
+
+    // If start time is not reached, only creator can start the league
+    // But if start time is reached, anyone can start the league
+    let now = Clock::get()?.unix_timestamp;
+    if now < league.start_ts {
+        require!(
+            ctx.accounts.user.key() == league.creator,
+            crate::errors::ErrorCode::NotCreator
+        );
+    }
+
+    league.status = LeagueStatus::Active;
+    msg!("League {:?} started!", league.key());
+
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct CloseLeague<'info> {
+    #[account(mut)]
+    pub league: Account<'info, League>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+}
+
+pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
+    let league = &mut ctx.accounts.league;
+
+    // 상태 체크: Active만 종료 가능
+    require!(
+        league.status == LeagueStatus::Active,
+        crate::errors::ErrorCode::InvalidStatus
+    );
+    
+    // If end time is not reached, only creator can close the league
+    // But, if end time is reached, anyone can close the league
+    let now = Clock::get()?.unix_timestamp;
+    if now < league.end_ts {
+        require!(
+            ctx.accounts.user.key() == league.creator,
+            crate::errors::ErrorCode::NotCreator
+        );
+    }
+    league.status = LeagueStatus::Closed;
+    msg!("League {:?} closed!", league.key());
+
     Ok(())
 }

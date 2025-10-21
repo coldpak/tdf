@@ -7,10 +7,10 @@ import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   createMint,
-  createAccount,
   mintTo,
   getAccount,
   getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 
 describe("TDF Program Tests", () => {
@@ -320,6 +320,7 @@ describe("TDF Program Tests", () => {
       const entryAmount = new anchor.BN(1000000); // 1 token (6 decimals)
       const markets = [marketPDA];
       const metadataUri = "https://example.com/league-metadata";
+      const maxParticipants = 100;
 
       const seedBuffer = Buffer.alloc(8);
       seedBuffer.writeBigInt64LE(BigInt(startTs));
@@ -349,7 +350,8 @@ describe("TDF Program Tests", () => {
           new anchor.BN(endTs),
           entryAmount,
           markets,
-          metadataUri
+          metadataUri,
+          maxParticipants
         )
         .accounts({
           creator: user1.publicKey,
@@ -380,7 +382,8 @@ describe("TDF Program Tests", () => {
       expect(league.entryAmount.toString()).to.equal(entryAmount.toString());
       expect(league.rewardVault.toString()).to.equal(rewardVaultPDA.toString());
       expect(league.metadataUri).to.equal(metadataUri);
-      expect(league.isClosed).to.be.false;
+      expect(league.status).to.deep.equal({ pending: {} });
+      expect(league.maxParticipants).to.equal(maxParticipants);
 
       console.log(
         "✅ League created successfully with correct entry token mint"
@@ -388,96 +391,11 @@ describe("TDF Program Tests", () => {
     });
   });
 
-  describe("League Joining", () => {
-    it("Should allow user to join league", async () => {
-      console.log("👤 Testing user joining league...");
-      console.log("Using entry token mint:", entryTokenMint.toString());
+  describe("League Status Management", () => {
+    it("Should fail to join league when status is not Active", async () => {
+      console.log("❌ Testing join league failure when not active...");
 
       const amount = new anchor.BN(1000000); // 1 token
-
-      [userDepositPDA] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("league_member_deposit"),
-          leaguePDA.toBuffer(),
-          user1.publicKey.toBuffer(),
-        ],
-        program.programId
-      );
-
-      console.log("User Deposit PDA:", userDepositPDA.toString());
-
-      // Create user's token account and mint tokens
-      console.log("🪙 Creating user token account...");
-      const userTokenAccount = await createAccount(
-        provider.connection,
-        user1,
-        entryTokenMint,
-        user1.publicKey
-      );
-
-      console.log("User Token Account:", userTokenAccount.toString());
-
-      console.log("💰 Minting tokens to user...");
-      await mintTo(
-        provider.connection,
-        admin,
-        entryTokenMint,
-        userTokenAccount,
-        admin,
-        10000000 // 10 tokens
-      );
-
-      // Verify user has tokens
-      const userTokenBalance = await getAccount(
-        provider.connection,
-        userTokenAccount
-      );
-      console.log("User token balance:", userTokenBalance.amount.toString());
-
-      // Get the associated token address for the reward vault
-      const rewardVaultAta = await getAssociatedTokenAddress(
-        entryTokenMint,
-        leaguePDA,
-        true // allowOwnerOffCurve
-      );
-
-      console.log("Reward Vault ATA:", rewardVaultAta.toString());
-      console.log("Join amount:", amount.toString());
-
-      const tx = await program.methods
-        .joinLeague(amount)
-        .accounts({
-          user: user1.publicKey,
-          league: leaguePDA,
-          userDeposit: userDepositPDA,
-          rewardVault: rewardVaultAta,
-          entryTokenMint: entryTokenMint,
-          userEntryAta: userTokenAccount,
-          vaultEntryAta: rewardVaultAta,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .signers([user1])
-        .rpc();
-
-      console.log("✅ Join league tx:", tx);
-
-      // Verify user deposit
-      const userDeposit = await program.account.leagueMemberDeposit.fetch(
-        userDepositPDA
-      );
-      expect(userDeposit.league.toString()).to.equal(leaguePDA.toString());
-      expect(userDeposit.user.toString()).to.equal(user1.publicKey.toString());
-      expect(userDeposit.amount.toString()).to.equal(amount.toString());
-      expect(userDeposit.claimed).to.be.false;
-
-      console.log(
-        "✅ User successfully joined league with correct token usage"
-      );
-    });
-
-    it("Should fail to join league with insufficient amount", async () => {
-      const insufficientAmount = new anchor.BN(500000); // 0.5 token (less than required)
 
       [userDepositPDA] = PublicKey.findProgramAddressSync(
         [
@@ -488,13 +406,14 @@ describe("TDF Program Tests", () => {
         program.programId
       );
 
-      // Create user's token account and mint tokens
-      const userTokenAccount = await createAccount(
+      // Create user's associated token account and mint tokens
+      const userTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
         provider.connection,
         user2,
         entryTokenMint,
         user2.publicKey
       );
+      const userTokenAccount = userTokenAccountInfo.address;
 
       await mintTo(
         provider.connection,
@@ -514,7 +433,7 @@ describe("TDF Program Tests", () => {
 
       try {
         await program.methods
-          .joinLeague(insufficientAmount)
+          .joinLeague(amount)
           .accounts({
             user: user2.publicKey,
             league: leaguePDA,
@@ -531,8 +450,365 @@ describe("TDF Program Tests", () => {
 
         expect.fail("Should have failed");
       } catch (error) {
-        expect(error.message).to.include("InsufficientEntryAmount");
+        expect(error.message).to.include("League is not active");
+        console.log("✅ Correctly failed to join league when not active");
       }
+    });
+
+    it("Should fail for non-creator to start league before start time", async () => {
+      console.log(
+        "❌ Testing start league failure for non-creator before start time..."
+      );
+
+      try {
+        await program.methods
+          .startLeague()
+          .accounts({
+            league: leaguePDA,
+            user: user2.publicKey,
+          } as any)
+          .signers([user2])
+          .rpc();
+
+        expect.fail("Should have failed");
+      } catch (error) {
+        expect(error.message).to.include("Not creator");
+        console.log(
+          "✅ Correctly failed to start league for non-creator before start time"
+        );
+      }
+    });
+
+    it("Should allow creator to start league before start time", async () => {
+      console.log("🏁 Testing creator can start league before start time...");
+
+      const tx = await program.methods
+        .startLeague()
+        .accounts({
+          league: leaguePDA,
+          user: user1.publicKey,
+        } as any)
+        .signers([user1])
+        .rpc();
+
+      console.log("✅ Start league tx:", tx);
+
+      // Verify league status changed to Active
+      const league = await program.account.league.fetch(leaguePDA);
+      expect(league.status).to.deep.equal({ active: {} });
+      console.log("✅ League started successfully by creator");
+    });
+
+    describe("League Joining", () => {
+      it("Should allow user to join league after start", async () => {
+        console.log("👤 Testing user joining league...");
+        console.log("Using entry token mint:", entryTokenMint.toString());
+
+        const amount = new anchor.BN(1000000); // 1 token
+
+        [userDepositPDA] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("league_member_deposit"),
+            leaguePDA.toBuffer(),
+            user1.publicKey.toBuffer(),
+          ],
+          program.programId
+        );
+
+        console.log("User Deposit PDA:", userDepositPDA.toString());
+
+        // Create user's associated token account and mint tokens
+        console.log("🪙 Creating user associated token account...");
+        const userTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          user1,
+          entryTokenMint,
+          user1.publicKey
+        );
+        const userTokenAccount = userTokenAccountInfo.address;
+
+        console.log("User Token Account:", userTokenAccount.toString());
+
+        console.log("💰 Minting tokens to user...");
+        await mintTo(
+          provider.connection,
+          admin,
+          entryTokenMint,
+          userTokenAccount,
+          admin,
+          10000000 // 10 tokens
+        );
+
+        // Verify user has tokens
+        const userTokenBalance = await getAccount(
+          provider.connection,
+          userTokenAccount
+        );
+        console.log("User token balance:", userTokenBalance.amount.toString());
+
+        // Get the associated token address for the reward vault
+        const rewardVaultAta = await getAssociatedTokenAddress(
+          entryTokenMint,
+          leaguePDA,
+          true // allowOwnerOffCurve
+        );
+
+        console.log("Reward Vault ATA:", rewardVaultAta.toString());
+        console.log("Join amount:", amount.toString());
+
+        const tx = await program.methods
+          .joinLeague(amount)
+          .accounts({
+            user: user1.publicKey,
+            league: leaguePDA,
+            userDeposit: userDepositPDA,
+            rewardVault: rewardVaultAta,
+            entryTokenMint: entryTokenMint,
+            userEntryAta: userTokenAccount,
+            vaultEntryAta: rewardVaultAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .signers([user1])
+          .rpc();
+
+        console.log("✅ Join league tx:", tx);
+
+        // Verify user deposit
+        const userDeposit = await program.account.leagueMemberDeposit.fetch(
+          userDepositPDA
+        );
+        expect(userDeposit.league.toString()).to.equal(leaguePDA.toString());
+        expect(userDeposit.user.toString()).to.equal(
+          user1.publicKey.toString()
+        );
+        expect(userDeposit.amount.toString()).to.equal(amount.toString());
+        expect(userDeposit.claimed).to.be.false;
+
+        console.log(
+          "✅ User successfully joined league with correct token usage"
+        );
+      });
+
+      it("Should fail to join league with insufficient amount", async () => {
+        const insufficientAmount = new anchor.BN(500000); // 0.5 token (less than required)
+
+        [userDepositPDA] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("league_member_deposit"),
+            leaguePDA.toBuffer(),
+            user2.publicKey.toBuffer(),
+          ],
+          program.programId
+        );
+
+        // Create user's associated token account and mint tokens
+        const userTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          user2,
+          entryTokenMint,
+          user2.publicKey
+        );
+        const userTokenAccount = userTokenAccountInfo.address;
+
+        await mintTo(
+          provider.connection,
+          admin,
+          entryTokenMint,
+          userTokenAccount,
+          admin,
+          10000000 // 10 tokens
+        );
+
+        // Get the associated token address for the reward vault
+        const rewardVaultAta = await getAssociatedTokenAddress(
+          entryTokenMint,
+          leaguePDA,
+          true // allowOwnerOffCurve
+        );
+
+        try {
+          await program.methods
+            .joinLeague(insufficientAmount)
+            .accounts({
+              user: user2.publicKey,
+              league: leaguePDA,
+              userDeposit: userDepositPDA,
+              rewardVault: rewardVaultAta,
+              entryTokenMint: entryTokenMint,
+              userEntryAta: userTokenAccount,
+              vaultEntryAta: rewardVaultAta,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+            } as any)
+            .signers([user2])
+            .rpc();
+
+          expect.fail("Should have failed");
+        } catch (error) {
+          expect(error.message).to.include("InsufficientEntryAmount");
+        }
+      });
+
+      it("Should allow creator to close league before end time", async () => {
+        console.log("🔒 Testing creator can close league before end time...");
+
+        const tx = await program.methods
+          .closeLeague()
+          .accounts({
+            league: leaguePDA,
+            user: user1.publicKey,
+          } as any)
+          .signers([user1])
+          .rpc();
+
+        console.log("✅ Close league tx:", tx);
+
+        // Verify league status changed to Closed
+        const league = await program.account.league.fetch(leaguePDA);
+        expect(league.status).to.deep.equal({ closed: {} });
+        console.log("✅ League closed successfully by creator");
+      });
+
+      it("Should fail for non-creator to close league before end time", async () => {
+        // Create a new league for this test
+        const newStartTs = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+        const newEndTs = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+        const newEntryAmount = new anchor.BN(1000000);
+        const newMarkets = [marketPDA];
+        const newMetadataUri = "https://example.com/league-metadata-3";
+        const newMaxParticipants = 50;
+
+        const seedBuffer = Buffer.alloc(8);
+        seedBuffer.writeBigInt64LE(BigInt(newStartTs));
+
+        const [newLeaguePDA] = PublicKey.findProgramAddressSync(
+          [Buffer.from("league"), user1.publicKey.toBuffer(), seedBuffer],
+          program.programId
+        );
+
+        const newRewardVaultPDA = await getAssociatedTokenAddress(
+          entryTokenMint,
+          newLeaguePDA,
+          true // allowOwnerOffCurve
+        );
+
+        // Create and start the new league
+        await program.methods
+          .createLeague(
+            new anchor.BN(newStartTs),
+            new anchor.BN(newEndTs),
+            newEntryAmount,
+            newMarkets,
+            newMetadataUri,
+            newMaxParticipants
+          )
+          .accounts({
+            creator: user1.publicKey,
+            league: newLeaguePDA,
+            entryTokenMint: entryTokenMint,
+            rewardVault: newRewardVaultPDA,
+            systemProgram: SystemProgram.programId,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: new PublicKey(
+              "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+            ),
+          } as any)
+          .signers([user1])
+          .rpc();
+
+        // Start the league
+        await program.methods
+          .startLeague()
+          .accounts({
+            league: newLeaguePDA,
+            user: user1.publicKey,
+          } as any)
+          .signers([user1])
+          .rpc();
+
+        // Try to close league with non-creator (user2)
+        try {
+          await program.methods
+            .closeLeague()
+            .accounts({
+              league: newLeaguePDA,
+              user: user2.publicKey, // Non-creator
+            } as any)
+            .signers([user2])
+            .rpc();
+
+          expect.fail("Should have failed");
+        } catch (error) {
+          expect(error.message).to.include("NotCreator");
+          console.log(
+            "✅ Correctly failed for non-creator to close league before end time"
+          );
+        }
+      });
+
+      it("Should fail to join league after it's closed", async () => {
+        console.log("❌ Testing join league failure after closed...");
+
+        const amount = new anchor.BN(1000000); // 1 token
+
+        [userDepositPDA] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("league_member_deposit"),
+            leaguePDA.toBuffer(),
+            user2.publicKey.toBuffer(),
+          ],
+          program.programId
+        );
+
+        // Create user's associated token account and mint tokens
+        const userTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          user2,
+          entryTokenMint,
+          user2.publicKey
+        );
+        const userTokenAccount = userTokenAccountInfo.address;
+
+        await mintTo(
+          provider.connection,
+          admin,
+          entryTokenMint,
+          userTokenAccount,
+          admin,
+          10000000 // 10 tokens
+        );
+
+        // Get the associated token address for the reward vault
+        const rewardVaultAta = await getAssociatedTokenAddress(
+          entryTokenMint,
+          leaguePDA,
+          true // allowOwnerOffCurve
+        );
+
+        try {
+          await program.methods
+            .joinLeague(amount)
+            .accounts({
+              user: user2.publicKey,
+              league: leaguePDA,
+              userDeposit: userDepositPDA,
+              rewardVault: rewardVaultAta,
+              entryTokenMint: entryTokenMint,
+              userEntryAta: userTokenAccount,
+              vaultEntryAta: rewardVaultAta,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+            } as any)
+            .signers([user2])
+            .rpc();
+
+          expect.fail("Should have failed");
+        } catch (error) {
+          expect(error.message).to.include("League is not active");
+          console.log("✅ Correctly failed to join league after it's closed");
+        }
+      });
     });
   });
 });

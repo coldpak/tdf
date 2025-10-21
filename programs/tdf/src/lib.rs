@@ -34,16 +34,25 @@ pub mod tdf {
     // League instructions
     pub fn create_league(
         ctx: Context<CreateLeague>,
-        start_ts: u64,
-        end_ts: u64,
+        start_ts: i64,
+        end_ts: i64,
         entry_amount: u64,
         markets: Vec<Pubkey>,
         metadata_uri: String,
+        max_participants: u32,
     ) -> Result<()> {
-        instructions::create_league(ctx, start_ts, end_ts, entry_amount, markets, metadata_uri)
+        instructions::create_league(ctx, start_ts, end_ts, entry_amount, markets, metadata_uri, max_participants)
     }
 
     pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
         instructions::join_league(ctx, amount)
+    }
+
+    pub fn start_league(ctx: Context<StartLeague>) -> Result<()> {
+        instructions::start_league(ctx)
+    }
+
+    pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
+        instructions::close_league(ctx)
     }
 }
