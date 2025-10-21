@@ -6,7 +6,7 @@ use crate::state::{League, LeagueMemberDeposit};
 
 /// Market is bounded to 10
 #[derive(Accounts)]
-#[instruction(start_ts: i64, markets: Vec<Pubkey>)]
+#[instruction(start_ts: u64, end_ts: u64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String)]
 pub struct CreateLeague<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -15,7 +15,7 @@ pub struct CreateLeague<'info> {
         init,
         payer = creator,
         space = 8 + 32 + (4 + 32 * 10) + 8 + 8 + 32 + 8 + 32 + (4 + 200) + 1 + 1,
-        seeds = [b"league", creator.key().as_ref(), start_ts.to_le_bytes().as_ref()],
+        seeds = [b"league", creator.key().as_ref(), &start_ts.to_le_bytes()],
         bump
     )]
     pub league: Account<'info, League>,
@@ -34,12 +34,18 @@ pub struct CreateLeague<'info> {
 
 pub fn create_league(
     ctx: Context<CreateLeague>,
-    start_ts: i64,
-    end_ts: i64,
+    start_ts: u64,
+    end_ts: u64,
     entry_amount: u64,
     markets: Vec<Pubkey>,
     metadata_uri: String,
 ) -> Result<()> {
+    // Validate markets vector size (max 10 markets)
+    require!(
+        markets.len() <= 10,
+        crate::errors::ErrorCode::InvalidMarketsLength
+    );
+
     let bump = ctx.bumps.league;
     let league = &mut ctx.accounts.league;
     let entry_token_mint = ctx.accounts.entry_token_mint.key();
@@ -57,23 +63,27 @@ pub fn create_league(
     let ata_account_info = &ctx.accounts.reward_vault;
     if ata_account_info.data_is_empty() {
         // Create the associated token account if it doesn't exist
-        anchor_spl::associated_token::create(
-            CpiContext::new(
-                ctx.accounts.associated_token_program.to_account_info(),
-                anchor_spl::associated_token::Create {
-                    payer: ctx.accounts.creator.to_account_info(),
-                    associated_token: ctx.accounts.reward_vault.to_account_info(),
-                    authority: league.to_account_info(),
-                    mint: ctx.accounts.entry_token_mint.to_account_info(),
-                    system_program: ctx.accounts.system_program.to_account_info(),
-                    token_program: ctx.accounts.token_program.to_account_info(),
-                },
-            ),
-        )?;
-        
-        msg!("Created associated token account for league: {:?}", reward_vault_ata);
+        anchor_spl::associated_token::create(CpiContext::new(
+            ctx.accounts.associated_token_program.to_account_info(),
+            anchor_spl::associated_token::Create {
+                payer: ctx.accounts.creator.to_account_info(),
+                associated_token: ctx.accounts.reward_vault.to_account_info(),
+                authority: league.to_account_info(),
+                mint: ctx.accounts.entry_token_mint.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                token_program: ctx.accounts.token_program.to_account_info(),
+            },
+        ))?;
+
+        msg!(
+            "Created associated token account for league: {:?}",
+            reward_vault_ata
+        );
     } else {
-        msg!("Associated token account already exists: {:?}", reward_vault_ata);
+        msg!(
+            "Associated token account already exists: {:?}",
+            reward_vault_ata
+        );
     }
 
     league.creator = ctx.accounts.creator.key();
@@ -130,28 +140,31 @@ pub struct JoinLeague<'info> {
 }
 
 pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
-  let league = &ctx.accounts.league;
-  require!(!league.is_closed, crate::errors::ErrorCode::LeagueAlreadyClosed);
-  require!(amount >= league.entry_amount, crate::errors::ErrorCode::InsufficientEntryAmount);
-  require_keys_eq!(league.entry_token_mint, ctx.accounts.entry_token_mint.key());
+    let league = &ctx.accounts.league;
+    require!(
+        !league.is_closed,
+        crate::errors::ErrorCode::LeagueAlreadyClosed
+    );
+    require!(
+        amount >= league.entry_amount,
+        crate::errors::ErrorCode::InsufficientEntryAmount
+    );
+    require_keys_eq!(league.entry_token_mint, ctx.accounts.entry_token_mint.key());
 
-  let deposit = &mut ctx.accounts.user_deposit;
-  deposit.league = league.key();
-  deposit.user = ctx.accounts.user.key();
-  deposit.amount = amount;
-  deposit.claimed = false;
+    let deposit = &mut ctx.accounts.user_deposit;
+    deposit.league = league.key();
+    deposit.user = ctx.accounts.user.key();
+    deposit.amount = amount;
+    deposit.claimed = false;
 
-  let cpi_accounts = Transfer {
-    from: ctx.accounts.user_entry_ata.to_account_info(),
-    to: ctx.accounts.vault_entry_ata.to_account_info(),
-    authority: ctx.accounts.user.to_account_info(),
-  };
-  let cpi_ctx = CpiContext::new(
-    ctx.accounts.token_program.to_account_info(),
-    cpi_accounts,
-  );
-  anchor_spl::token::transfer(cpi_ctx, amount)?;
+    let cpi_accounts = Transfer {
+        from: ctx.accounts.user_entry_ata.to_account_info(),
+        to: ctx.accounts.vault_entry_ata.to_account_info(),
+        authority: ctx.accounts.user.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+    anchor_spl::token::transfer(cpi_ctx, amount)?;
 
-  msg!("User joined league: {:?}", league.key());
-  Ok(())
+    msg!("User joined league: {:?}", league.key());
+    Ok(())
 }

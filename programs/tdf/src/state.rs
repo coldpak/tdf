@@ -25,8 +25,8 @@ pub struct Market {
 pub struct League {
     pub creator: Pubkey,
     pub markets: Vec<Pubkey>,
-    pub start_ts: i64, // timestamp
-    pub end_ts: i64,   // timestamp
+    pub start_ts: u64, // timestamp
+    pub end_ts: u64,   // timestamp
 
     pub entry_token_mint: Pubkey, // SPL token for entry fees, if SOL => wSOL
     pub entry_amount: u64,    // token amount to enter the league

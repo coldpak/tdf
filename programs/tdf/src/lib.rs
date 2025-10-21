@@ -34,8 +34,8 @@ pub mod tdf {
     // League instructions
     pub fn create_league(
         ctx: Context<CreateLeague>,
-        start_ts: i64,
-        end_ts: i64,
+        start_ts: u64,
+        end_ts: u64,
         entry_amount: u64,
         markets: Vec<Pubkey>,
         metadata_uri: String,

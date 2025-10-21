@@ -10,4 +10,10 @@ pub enum ErrorCode {
     InsufficientEntryAmount,
     #[msg("Invalid entry token mint")]
     InvalidEntryTokenMint,
+    #[msg("Invalid markets length")]
+    InvalidMarketsLength,
+    #[msg("Not admin")]
+    NotAdmin,
+    #[msg("Market already exists")]
+    MarketAlreadyExists,
 }

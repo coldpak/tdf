@@ -33,6 +33,12 @@ pub fn list_market(
     decimals: u8,
     created_at: i64,
 ) -> Result<()> {
+    // validate signer is admin
+    require!(
+        ctx.accounts.admin.key() == ctx.accounts.global_state.admin,
+        crate::errors::ErrorCode::NotAdmin
+    );
+
     let bump = ctx.bumps.market;
     let market = &mut ctx.accounts.market;
     market.symbol = symbol;
