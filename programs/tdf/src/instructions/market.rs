@@ -15,7 +15,9 @@ pub struct ListMarket<'info> {
         bump
     )]
     pub market: Account<'info, Market>,
+    /// CHECK: Oracle feed account - validated by the oracle program
     pub oracle_feed: AccountInfo<'info>,
+    /// CHECK: Base currency account - validated by the token program
     pub base_currency: AccountInfo<'info>,
     #[account(
         mut,

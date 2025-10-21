@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
-use anchor_spl::token::{Token, Mint, Transfer};
+use anchor_spl::token::{Token, Transfer};
 
 use crate::state::{League, LeagueMemberDeposit};
 
@@ -20,7 +20,8 @@ pub struct CreateLeague<'info> {
     )]
     pub league: Account<'info, League>,
 
-    pub entry_token_mint: Account<'info, Mint>,
+    /// CHECK: Entry token mint - validated by the token program
+    pub entry_token_mint: AccountInfo<'info>,
 
     /// CHECK: reward vault ATA for the league - will be created if it doesn't exist
     #[account(mut)]
@@ -113,8 +114,8 @@ pub struct JoinLeague<'info> {
     #[account(mut)]
     pub reward_vault: UncheckedAccount<'info>,
 
-    /// CHECK: Entry token mint
-    pub entry_token_mint: Account<'info, Mint>,
+    /// CHECK: Entry token mint - validated by the token program
+    pub entry_token_mint: UncheckedAccount<'info>,
 
     /// CHECK: User entry ATA for transfer entry token to the league
     #[account(mut)]
