@@ -2,11 +2,11 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{Token, Transfer};
 
-use crate::state::{League, LeagueMemberDeposit, LeagueStatus};
+use crate::state::{League, LeagueStatus, Participant};
 
 /// Market is bounded to 10
 #[derive(Accounts)]
-#[instruction(start_ts: i64, end_ts: i64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String, max_participants: u32)]
+#[instruction(start_ts: i64, end_ts: i64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String, max_participants: u32, virtual_on_deposit: u64, max_leverage: u8, nonce: u8)]
 pub struct CreateLeague<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -14,8 +14,8 @@ pub struct CreateLeague<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + (4 + 32 * 10) + 8 + 8 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 1,
-        seeds = [b"league", creator.key().as_ref(), &start_ts.to_le_bytes()],
+        space = 8 + 32 + (4 + (32 * 10)) + 8 + 8 + 1 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
+        seeds = [b"league", creator.key().as_ref(), &[nonce]],
         bump
     )]
     pub league: Account<'info, League>,
@@ -36,10 +36,13 @@ pub fn create_league(
     ctx: Context<CreateLeague>,
     start_ts: i64,
     end_ts: i64,
-    entry_amount: u64,
+    entry_amount: i64,
     markets: Vec<Pubkey>,
     metadata_uri: String,
     max_participants: u32,
+    virtual_on_deposit: i64,
+    max_leverage: u8,
+    nonce: u8,
 ) -> Result<()> {
     // Validate markets vector size (max 10 markets)
     require!(
@@ -91,9 +94,12 @@ pub fn create_league(
     league.markets = markets;
     league.start_ts = start_ts;
     league.end_ts = end_ts;
+    league.nonce = nonce;
 
     league.entry_token_mint = ctx.accounts.entry_token_mint.key();
     league.entry_amount = entry_amount;
+    league.virtual_on_deposit = virtual_on_deposit;
+    league.max_leverage = max_leverage;
 
     league.reward_vault = ctx.accounts.reward_vault.key();
     league.metadata_uri = metadata_uri;
@@ -114,13 +120,13 @@ pub struct JoinLeague<'info> {
     pub league: Account<'info, League>,
 
     #[account(
-    init,
-    payer = user,
-    space = 8 + 32 + 32 + 8 + 1 + 1,
-    seeds = [b"league_member_deposit", league.key().as_ref(), user.key().as_ref()],
-    bump
+        init,
+        payer = user,
+        space = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 8 + 2 + 2 + 8 + (4 + 32 * 10) + 1,
+        seeds = [b"participant", league.key().as_ref(), user.key().as_ref()],
+        bump
     )]
-    pub user_deposit: Account<'info, LeagueMemberDeposit>,
+    pub participant: Account<'info, Participant>,
 
     /// CHECK: Reward vault ATA for transfer entry token to the league
     #[account(mut)]
@@ -141,7 +147,7 @@ pub struct JoinLeague<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
+pub fn join_league(ctx: Context<JoinLeague>, amount: i64) -> Result<()> {
     let league = &ctx.accounts.league;
     require!(
         league.status == LeagueStatus::Active,
@@ -153,24 +159,19 @@ pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
     );
     require_keys_eq!(league.entry_token_mint, ctx.accounts.entry_token_mint.key());
 
-    let deposit = &mut ctx.accounts.user_deposit;
-    deposit.league = league.key();
-    deposit.user = ctx.accounts.user.key();
-    deposit.amount = amount;
-    deposit.claimed = false;
-
-    let cpi_accounts = Transfer {
-        from: ctx.accounts.user_entry_ata.to_account_info(),
-        to: ctx.accounts.vault_entry_ata.to_account_info(),
-        authority: ctx.accounts.user.to_account_info(),
-    };
-    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
-    anchor_spl::token::transfer(cpi_ctx, amount)?;
+    let participant = &mut ctx.accounts.participant;
+    participant.league = league.key();
+    participant.user = ctx.accounts.user.key();
+    participant.claimed = false;
+    participant.virtual_balance = league.virtual_on_deposit;
+    participant.positions = Vec::new();
+    participant.topk_equity_index = 0xFFFF;
+    participant.topk_volume_index = 0xFFFF;
+    participant.bump = ctx.bumps.participant;
 
     msg!("User joined league: {:?}", league.key());
     Ok(())
 }
-
 
 #[derive(Accounts)]
 pub struct StartLeague<'info> {
@@ -218,12 +219,12 @@ pub struct CloseLeague<'info> {
 pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
     let league = &mut ctx.accounts.league;
 
-    // 상태 체크: Active만 종료 가능
+    // Check if the league is active
     require!(
         league.status == LeagueStatus::Active,
         crate::errors::ErrorCode::InvalidStatus
     );
-    
+
     // If end time is not reached, only creator can close the league
     // But, if end time is reached, anyone can close the league
     let now = Clock::get()?.unix_timestamp;

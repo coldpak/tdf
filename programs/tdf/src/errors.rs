@@ -22,4 +22,20 @@ pub enum ErrorCode {
     StartTimeNotReached,
     #[msg("Not creator")]
     NotCreator,
+    #[msg("Invalid leverage")]
+    InvalidLeverage,
+    #[msg("Insufficient margin")]
+    InsufficientMargin,
+    #[msg("Invalid position sequence")]
+    InvalidPositionSequence,
+    #[msg("Position already exists")]
+    PositionAlreadyExists,
+    #[msg("Invalid reduce size")]
+    InvalidReduceSize,
+    #[msg("Max open position exceeded")]
+    MaxOpenPositionExceeded,
+    #[msg("Invalid position size")]
+    InvalidPositionSize,
+    #[msg("Invalid price")]
+    InvalidPrice,
 }

@@ -10,7 +10,7 @@ pub struct ListMarket<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + 16 + 32 + 32 + 1 + 32 + 1 + 8 + 1,
+        space = 8 + 16 + 32 + 32 + 1 + 32 + 1 + 8 + 1 + 1,
         seeds = [b"market", oracle_feed.key().as_ref()],
         bump
     )]
@@ -31,13 +31,9 @@ pub fn list_market(
     ctx: Context<ListMarket>,
     symbol: [u8; 16],
     decimals: u8,
-    created_at: i64,
+    max_leverage: u8,
 ) -> Result<()> {
-    // validate signer is admin
-    require!(
-        ctx.accounts.admin.key() == ctx.accounts.global_state.admin,
-        crate::errors::ErrorCode::NotAdmin
-    );
+    let now = Clock::get()?.unix_timestamp;
 
     let bump = ctx.bumps.market;
     let market = &mut ctx.accounts.market;
@@ -47,7 +43,8 @@ pub fn list_market(
     market.decimals = decimals;
     market.listed_by = ctx.accounts.admin.key();
     market.is_active = true;
-    market.created_at = created_at;
+    market.created_at = now;
+    market.max_leverage = max_leverage;
     market.bump = bump;
 
     msg!("Market listed: {:?}", market.symbol);

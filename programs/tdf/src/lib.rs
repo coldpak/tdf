@@ -3,6 +3,7 @@ use anchor_lang::prelude::*;
 mod errors;
 mod instructions;
 mod state;
+mod utils;
 
 declare_id!("3jFHqM7VCceGLftStfrhLHHKRHBJZyteYuA5c63HXjuY");
 
@@ -26,9 +27,9 @@ pub mod tdf {
         ctx: Context<ListMarket>,
         symbol: [u8; 16],
         decimals: u8,
-        created_at: i64,
+        max_leverage: u8,
     ) -> Result<()> {
-        instructions::list_market(ctx, symbol, decimals, created_at)
+        instructions::list_market(ctx, symbol, decimals, max_leverage)
     }
 
     // League instructions
@@ -36,15 +37,29 @@ pub mod tdf {
         ctx: Context<CreateLeague>,
         start_ts: i64,
         end_ts: i64,
-        entry_amount: u64,
+        entry_amount: i64,
         markets: Vec<Pubkey>,
         metadata_uri: String,
         max_participants: u32,
+        virtual_on_deposit: i64,
+        max_leverage: u8,
+        nonce: u8,
     ) -> Result<()> {
-        instructions::create_league(ctx, start_ts, end_ts, entry_amount, markets, metadata_uri, max_participants)
+        instructions::create_league(
+            ctx,
+            start_ts,
+            end_ts,
+            entry_amount,
+            markets,
+            metadata_uri,
+            max_participants,
+            virtual_on_deposit,
+            max_leverage,
+            nonce,
+        )
     }
 
-    pub fn join_league(ctx: Context<JoinLeague>, amount: u64) -> Result<()> {
+    pub fn join_league(ctx: Context<JoinLeague>, amount: i64) -> Result<()> {
         instructions::join_league(ctx, amount)
     }
 
@@ -54,5 +69,27 @@ pub mod tdf {
 
     pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
         instructions::close_league(ctx)
+    }
+
+    // Position instructions
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
+        direction: state::Direction,
+        size: i64,
+        leverage: u8,
+        seq_num: u64,
+    ) -> Result<()> {
+        instructions::open_position(ctx, direction, size, leverage, seq_num)
+    }
+
+    pub fn increase_position_size(
+        ctx: Context<IncreasePositionSize>,
+        size: i64,
+    ) -> Result<()> {
+        instructions::increase_position_size(ctx, size)
+    }
+
+    pub fn decrease_position_size(ctx: Context<DecreasePositionSize>, size_to_close: i64) -> Result<()> {
+        instructions::decrease_position_size(ctx, size_to_close)
     }
 }
