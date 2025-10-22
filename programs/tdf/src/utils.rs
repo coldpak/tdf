@@ -1,6 +1,10 @@
 use anchor_lang::prelude::*;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::state::Direction;
+
+// Global mock price for testing
+static MOCK_PRICE: AtomicI64 = AtomicI64::new(188_000_000); // Default: 188 USD * 1e6
 
 pub fn dir_sign(direction: Direction) -> i64 {
   match direction {
@@ -34,5 +38,28 @@ pub fn get_price_from_oracle(oracle_feed: &AccountInfo) -> Result<i64> {
   // let price = oracle_feed.try_borrow_data()?.get(0..8)?.try_into().unwrap();
   // Ok(u64::from_le_bytes(price));
   
-  Ok(188_000_000) // 188 USD * 1e6
+  // Use mock price for testing
+  Ok(MOCK_PRICE.load(Ordering::Relaxed))
+}
+
+// Test helper functions for price manipulation
+#[cfg(test)]
+pub fn set_mock_price(price: i64) {
+  MOCK_PRICE.store(price, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub fn get_mock_price() -> i64 {
+  MOCK_PRICE.load(Ordering::Relaxed)
+}
+
+// Allow dead code for test functions
+#[allow(dead_code)]
+pub fn set_mock_price_for_testing(price: i64) {
+  MOCK_PRICE.store(price, Ordering::Relaxed);
+}
+
+#[allow(dead_code)]
+pub fn get_mock_price_for_testing() -> i64 {
+  MOCK_PRICE.load(Ordering::Relaxed)
 }

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
-use anchor_spl::token::{Token, Transfer};
+use anchor_spl::token::{Token};
 
 use crate::state::{League, LeagueStatus, Participant};
 
@@ -158,6 +158,33 @@ pub fn join_league(ctx: Context<JoinLeague>, amount: i64) -> Result<()> {
         crate::errors::ErrorCode::InsufficientEntryAmount
     );
     require_keys_eq!(league.entry_token_mint, ctx.accounts.entry_token_mint.key());
+
+    let reward_vault_ata = get_associated_token_address(&league.key(), &ctx.accounts.entry_token_mint.key());
+    require_keys_eq!(
+        ctx.accounts.reward_vault.key(),
+        reward_vault_ata,
+        crate::errors::ErrorCode::InvalidRewardVault
+    );
+
+    let user_entry_ata = get_associated_token_address(&ctx.accounts.user.key(), &ctx.accounts.entry_token_mint.key());
+    require_keys_eq!(
+        ctx.accounts.user_entry_ata.key(),
+        user_entry_ata,
+        crate::errors::ErrorCode::InvalidUserEntryATA
+    );
+
+    // transfer to join league
+    anchor_spl::token::transfer(
+        CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::Transfer {
+                from: ctx.accounts.user_entry_ata.to_account_info(),
+                to: ctx.accounts.reward_vault.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
+        ),
+        amount as u64
+    )?;
 
     let participant = &mut ctx.accounts.participant;
     participant.league = league.key();

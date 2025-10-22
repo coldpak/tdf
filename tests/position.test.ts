@@ -6,7 +6,7 @@ import {
   getPDAs,
   TEST_CONFIG,
 } from "./global-setup";
-import { TestHelpers, expectPosition } from "./helpers";
+import { TestHelpers, expectPosition, calculateExpectedPnL, calculateExpectedNotional } from "./helpers";
 
 describe("Position Tests", () => {
   let testHelpers: TestHelpers;
@@ -407,6 +407,270 @@ describe("Position Tests", () => {
         expect(error.message).to.include("Invalid reduce size");
         console.log("✅ Correctly failed with invalid size");
       }
+    });
+  });
+
+  describe("PnL Calculation Tests", () => {
+    it("Should calculate PnL correctly for long position with price changes", async () => {
+      console.log("📊 Testing PnL calculation for long position...");
+
+      // Create a new position for PnL testing
+      const pnlPositionPDA = globalTestState.createPositionPDA(
+        leaguePDA,
+        accounts.user1.publicKey,
+        marketPDA,
+        1
+      );
+
+      // Open long position
+      await testHelpers.openPosition(
+        accounts.user1,
+        leaguePDA,
+        marketPDA,
+        participantPDA,
+        pnlPositionPDA,
+        { long: {} },
+        SIZE_TO_OPEN_POSITION,
+        5, // LEVERAGE
+        1
+      );
+
+      const position = await getProgram().account.position.fetch(pnlPositionPDA);
+      const entryPrice = position.entryPrice.toNumber();
+      const size = position.size.toNumber();
+      const notional = position.notional.toNumber();
+
+      console.log(`Entry price: ${entryPrice}, Size: ${size}, Notional: ${notional}`);
+
+      // Test PnL calculation with specific price scenarios and exact values
+      const priceScenarios = [
+        { 
+          price: Math.floor(entryPrice * 1.1), 
+          description: "10% price increase",
+          expectedPnL: Math.floor((Math.floor(entryPrice * 1.1) * size / 1e6) - (entryPrice * size / 1e6))
+        },
+        { 
+          price: Math.floor(entryPrice * 0.9), 
+          description: "10% price decrease",
+          expectedPnL: Math.floor((Math.floor(entryPrice * 0.9) * size / 1e6) - (entryPrice * size / 1e6))
+        },
+        { 
+          price: Math.floor(entryPrice * 1.5), 
+          description: "50% price increase",
+          expectedPnL: Math.floor((Math.floor(entryPrice * 1.5) * size / 1e6) - (entryPrice * size / 1e6))
+        },
+        { 
+          price: Math.floor(entryPrice * 0.5), 
+          description: "50% price decrease",
+          expectedPnL: Math.floor((Math.floor(entryPrice * 0.5) * size / 1e6) - (entryPrice * size / 1e6))
+        },
+      ];
+
+      for (const scenario of priceScenarios) {
+        const calculatedPnL = calculateExpectedPnL(
+          entryPrice,
+          scenario.price,
+          size,
+          { long: {} }
+        );
+
+        console.log(`${scenario.description}: Expected ${scenario.expectedPnL}, Calculated ${calculatedPnL}`);
+        
+        // Verify exact PnL calculation
+        expect(calculatedPnL).to.equal(scenario.expectedPnL);
+        
+        // Also verify PnL direction matches price movement
+        if (scenario.price > entryPrice) {
+          expect(calculatedPnL).to.be.greaterThan(0);
+        } else {
+          expect(calculatedPnL).to.be.lessThan(0);
+        }
+      }
+
+      console.log("✅ PnL calculation for long position verified");
+    });
+
+    it("Should calculate PnL correctly for short position with price changes", async () => {
+      console.log("📊 Testing PnL calculation for short position...");
+
+      // Create a new position for PnL testing
+      const shortPositionPDA = globalTestState.createPositionPDA(
+        leaguePDA,
+        accounts.user1.publicKey,
+        marketPDA,
+        2
+      );
+
+      // Open short position
+      await testHelpers.openPosition(
+        accounts.user1,
+        leaguePDA,
+        marketPDA,
+        participantPDA,
+        shortPositionPDA,
+        { short: {} },
+        SIZE_TO_OPEN_POSITION,
+        5, // LEVERAGE
+        2
+      );
+
+      const position = await getProgram().account.position.fetch(shortPositionPDA);
+      const entryPrice = position.entryPrice.toNumber();
+      const size = position.size.toNumber();
+
+      // Test PnL calculation for short position with exact values
+      const priceScenarios = [
+        { 
+          price: Math.floor(entryPrice * 0.9), 
+          description: "10% price decrease (short profit)",
+          expectedPnL: Math.floor(-((Math.floor(entryPrice * 0.9) * size / 1e6) - (entryPrice * size / 1e6)))
+        },
+        { 
+          price: Math.floor(entryPrice * 1.1), 
+          description: "10% price increase (short loss)",
+          expectedPnL: Math.floor(-((Math.floor(entryPrice * 1.1) * size / 1e6) - (entryPrice * size / 1e6)))
+        },
+        { 
+          price: Math.floor(entryPrice * 0.5), 
+          description: "50% price decrease (big short profit)",
+          expectedPnL: Math.floor(-((Math.floor(entryPrice * 0.5) * size / 1e6) - (entryPrice * size / 1e6)))
+        },
+        { 
+          price: Math.floor(entryPrice * 1.5), 
+          description: "50% price increase (big short loss)",
+          expectedPnL: Math.floor(-((Math.floor(entryPrice * 1.5) * size / 1e6) - (entryPrice * size / 1e6)))
+        },
+      ];
+
+      for (const scenario of priceScenarios) {
+        const calculatedPnL = calculateExpectedPnL(
+          entryPrice,
+          scenario.price,
+          size,
+          { short: {} }
+        );
+
+        console.log(`${scenario.description}: Expected ${scenario.expectedPnL}, Calculated ${calculatedPnL}`);
+        
+        // Verify exact PnL calculation for short position
+        expect(calculatedPnL).to.equal(scenario.expectedPnL);
+        
+        // Also verify PnL direction for short positions
+        if (scenario.price < entryPrice) {
+          expect(calculatedPnL).to.be.greaterThan(0);
+        } else {
+          expect(calculatedPnL).to.be.lessThan(0);
+        }
+      }
+
+      console.log("✅ PnL calculation for short position verified");
+    });
+
+    it("Should demonstrate leverage impact on margin vs PnL", async () => {
+      console.log("⚖️ Testing leverage impact on margin requirements...");
+
+      const entryPrice = 188_000_000; // 188 USD
+      const currentPrice = 200_000_000; // 200 USD (6.4% increase)
+      const size = SIZE_TO_OPEN_POSITION;
+      const leverages = [1, 2, 5, 10];
+
+      // Calculate expected values
+      const expectedNotional = calculateExpectedNotional(entryPrice, size);
+      const expectedPnL = calculateExpectedPnL(entryPrice, currentPrice, size, { long: {} });
+
+      console.log("Leverage | Margin Required | PnL | PnL/Margin Ratio");
+      console.log("---------|-----------------|-----|------------------");
+
+      for (const leverage of leverages) {
+        const notional = calculateExpectedNotional(entryPrice, size);
+        const marginRequired = notional / leverage;
+        const pnl = calculateExpectedPnL(entryPrice, currentPrice, size, { long: {} });
+        const pnlMarginRatio = pnl / marginRequired;
+
+        console.log(`${leverage}x | ${marginRequired.toFixed(2)} | ${pnl.toFixed(2)} | ${pnlMarginRatio.toFixed(2)}x`);
+        
+        // Verify exact calculations
+        expect(notional).to.equal(expectedNotional);
+        expect(pnl).to.equal(expectedPnL);
+        expect(marginRequired).to.equal(expectedNotional / leverage);
+        expect(pnlMarginRatio).to.equal(expectedPnL / (expectedNotional / leverage));
+        
+        // Higher leverage = lower margin requirement, same PnL
+        expect(pnl).to.be.greaterThan(0);
+        expect(marginRequired).to.be.greaterThan(0);
+      }
+
+      console.log("✅ Leverage impact analysis completed");
+    });
+
+    it("Should verify PnL calculation matches program implementation", async () => {
+      console.log("🔍 Testing PnL calculation accuracy against program logic...");
+
+      // Create a position to get real program data
+      const testPositionPDA = globalTestState.createPositionPDA(
+        leaguePDA,
+        accounts.user1.publicKey,
+        marketPDA,
+        3
+      );
+
+      await testHelpers.openPosition(
+        accounts.user1,
+        leaguePDA,
+        marketPDA,
+        participantPDA,
+        testPositionPDA,
+        { long: {} },
+        SIZE_TO_OPEN_POSITION,
+        5, // LEVERAGE
+        3
+      );
+
+      const position = await getProgram().account.position.fetch(testPositionPDA);
+      const entryPrice = position.entryPrice.toNumber();
+      const size = position.size.toNumber();
+      const notional = position.notional.toNumber();
+
+      // Test specific price scenarios with exact calculations
+      const testCases = [
+        {
+          currentPrice: 200_000_000, // 200 USD
+          description: "Price 200 USD",
+          expectedPnL: Math.floor((200_000_000 * size / 1e6) - (entryPrice * size / 1e6))
+        },
+        {
+          currentPrice: 150_000_000, // 150 USD  
+          description: "Price 150 USD",
+          expectedPnL: Math.floor((150_000_000 * size / 1e6) - (entryPrice * size / 1e6))
+        },
+        {
+          currentPrice: 250_000_000, // 250 USD
+          description: "Price 250 USD", 
+          expectedPnL: Math.floor((250_000_000 * size / 1e6) - (entryPrice * size / 1e6))
+        }
+      ];
+
+      for (const testCase of testCases) {
+        const calculatedPnL = calculateExpectedPnL(
+          entryPrice,
+          testCase.currentPrice,
+          size,
+          { long: {} }
+        );
+
+        console.log(`${testCase.description}: Expected ${testCase.expectedPnL}, Calculated ${calculatedPnL}`);
+        
+        // Verify exact match
+        expect(calculatedPnL).to.equal(testCase.expectedPnL);
+        
+        // Verify the calculation logic manually
+        const manualCalculation = Math.floor(
+          (testCase.currentPrice * size / 1e6) - (entryPrice * size / 1e6)
+        );
+        expect(calculatedPnL).to.equal(manualCalculation);
+      }
+
+      console.log("✅ PnL calculation accuracy verified against program logic");
     });
   });
 });

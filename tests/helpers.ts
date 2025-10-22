@@ -166,7 +166,12 @@ export class TestHelpers {
     amount: number
   ): Promise<string> {
     const rewardVaultAta = await this.getRewardVaultATA(leaguePDA);
-    const userTokenAccount = await this.setupUserTokenAccount(user, amount);
+    
+    // Get existing user token account instead of creating/minting new tokens
+    const userTokenAccount = await getAssociatedTokenAddress(
+      this.accounts.entryTokenMint,
+      user.publicKey
+    );
 
     const tx = await this.program.methods
       .joinLeague(new BN(amount))
@@ -415,4 +420,41 @@ export function expectPosition(
   );
   expect(position.openedAt.toNumber()).to.be.greaterThan(expected.openedAt);
   expect(position.closedAt.toNumber()).to.equal(expected.closedAt);
+}
+
+// Price manipulation helpers for testing
+export function setMockPrice(price: number): void {
+  // This would need to be implemented in the Rust program
+  // For now, we'll use a different approach with multiple oracle feeds
+  console.log(`Setting mock price to: ${price}`);
+}
+
+export function getMockPrice(): number {
+  // This would need to be implemented in the Rust program
+  return 188_000_000; // Default price
+}
+
+// PnL calculation helpers for verification
+export function calculateExpectedPnL(
+  entryPrice: number,
+  currentPrice: number,
+  size: number,
+  direction: { long: {} } | { short: {} },
+  decimals: number = 6
+): number {
+  const scale = Math.pow(10, decimals);
+  const notional = (entryPrice * size) / scale;
+  const currentValue = (currentPrice * size) / scale;
+  const directionSign = 'long' in direction ? 1 : -1;
+  
+  return (currentValue - notional) * directionSign;
+}
+
+export function calculateExpectedNotional(
+  price: number,
+  size: number,
+  decimals: number = 6
+): number {
+  const scale = Math.pow(10, decimals);
+  return (price * size) / scale;
 }

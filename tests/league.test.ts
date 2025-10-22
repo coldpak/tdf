@@ -191,18 +191,26 @@ describe("League Tests", () => {
 
         console.log("User Token Account:", userTokenAccount.toString());
 
-        // Verify user has tokens
-        const userTokenBalance = await getAccount(
+        // Verify user has tokens before joining
+        const userTokenBalanceBefore = await getAccount(
           getProvider().connection,
           userTokenAccount
         );
-        console.log("User token balance:", userTokenBalance.amount.toString());
+        console.log("User token balance before join:", userTokenBalanceBefore.amount.toString());
+        expect(userTokenBalanceBefore.amount.toString()).to.equal("10000000");
 
         const rewardVaultAta = await globalTestState.getRewardVaultATA(accounts.entryTokenMint, leaguePDA);
 
+        // Verify reward vault balance before joining
+        const rewardVaultBalanceBefore = await getAccount(
+          getProvider().connection,
+          rewardVaultAta
+        );
+        console.log("Reward vault balance before join:", rewardVaultBalanceBefore.amount.toString());
         console.log("Reward Vault ATA:", rewardVaultAta.toString());
         console.log("Join amount:", amount.toString());
 
+        // joinLeague now uses existing token account without minting additional tokens
         const tx = await testHelpers.joinLeague(
           accounts.user1,
           leaguePDA,
@@ -211,6 +219,28 @@ describe("League Tests", () => {
         );
 
         console.log("✅ Join league tx:", tx);
+
+        // Verify user token balance after joining (should be reduced by entry amount)
+        const userTokenBalanceAfter = await getAccount(
+          getProvider().connection,
+          userTokenAccount
+        );
+        console.log("User token balance after join:", userTokenBalanceAfter.amount.toString());
+        
+        const expectedUserBalance = Number(userTokenBalanceBefore.amount) - amount;
+        expect(userTokenBalanceAfter.amount.toString()).to.equal(expectedUserBalance.toString());
+        console.log("✅ User token balance correctly deducted by entry amount");
+
+        // Verify reward vault balance after joining (should be increased by entry amount)
+        const rewardVaultBalanceAfter = await getAccount(
+          getProvider().connection,
+          rewardVaultAta
+        );
+        console.log("Reward vault balance after join:", rewardVaultBalanceAfter.amount.toString());
+        
+        const expectedVaultBalance = Number(rewardVaultBalanceBefore.amount) + amount;
+        expect(rewardVaultBalanceAfter.amount.toString()).to.equal(expectedVaultBalance.toString());
+        console.log("✅ Reward vault balance correctly increased by entry amount");
 
         // Verify participant
         const participant = await getProgram().account.participant.fetch(participantPDA);

@@ -10,6 +10,8 @@ pub enum ErrorCode {
     InsufficientEntryAmount,
     #[msg("Invalid entry token mint")]
     InvalidEntryTokenMint,
+    #[msg("Invalid user entry ATA")]
+    InvalidUserEntryATA,
     #[msg("Invalid markets length")]
     InvalidMarketsLength,
     #[msg("Not admin")]
@@ -38,4 +40,6 @@ pub enum ErrorCode {
     InvalidPositionSize,
     #[msg("Invalid price")]
     InvalidPrice,
+    #[msg("Invalid refresh accounts")]
+    InvalidRefreshAccounts,
 }
