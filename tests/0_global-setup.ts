@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Tdf } from "../target/types/tdf";
+import { Oracle } from "../target/types/oracle";
 import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import {
   createMint,
@@ -35,6 +36,7 @@ export interface TestAccounts {
 // Test PDAs interface
 export interface TestPDAs {
   globalStatePDA: PublicKey;
+  priceFeedPDA: PublicKey;
   marketPDA: PublicKey;
   leaguePDA: PublicKey;
   participantPDA: PublicKey;
@@ -45,6 +47,7 @@ export interface TestPDAs {
 export class GlobalTestState {
   private static instance: GlobalTestState;
   private _program: Program<Tdf> | null = null;
+  private _oracleProgram: Program<Oracle> | null = null;
   private _provider: anchor.AnchorProvider | null = null;
   private _accounts: TestAccounts | null = null;
   private _pdas: Partial<TestPDAs> | null = null;
@@ -70,6 +73,7 @@ export class GlobalTestState {
     const provider = anchor.AnchorProvider.env();
     anchor.setProvider(provider);
     this._program = anchor.workspace.tdf as Program<Tdf>;
+    this._oracleProgram = anchor.workspace.oracle as Program<Oracle>;
     this._provider = provider;
 
     // Initialize test accounts
@@ -93,40 +97,127 @@ export class GlobalTestState {
     console.log("💰 Airdropping SOL to test accounts...");
     await this.airdropToAccounts();
 
-    // Wait for airdrops to complete
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Verify airdrops
-    const adminBalance = await this._provider!.connection.getBalance(this._accounts.admin.publicKey);
-    console.log("Admin balance:", adminBalance / anchor.web3.LAMPORTS_PER_SOL, "SOL");
-
-    // Create entry token mint
-    console.log("🪙 Creating entry token mint...");
-    this._accounts.entryTokenMint = await this.createEntryTokenMint();
-
     // Calculate PDAs
     this._pdas = {
       globalStatePDA: PublicKey.findProgramAddressSync(
         [Buffer.from("global_state")],
         this._program!.programId
       )[0],
+      priceFeedPDA: PublicKey.findProgramAddressSync(
+        [Buffer.from("price_feed")],
+        this._oracleProgram!.programId
+      )[0],
     };
 
-    console.log("📍 Global State PDA:", this._pdas.globalStatePDA.toString());
-    console.log("✅ Global test environment initialized successfully");
+    // Wait for airdrops to complete
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Verify airdrops
+    const adminBalance = await this._provider!.connection.getBalance(
+      this._accounts.admin.publicKey
+    );
+    console.log(
+      "Admin balance:",
+      adminBalance / anchor.web3.LAMPORTS_PER_SOL,
+      "SOL"
+    );
+
+    // Initialize global state
+    console.log("🔮 Initializing global state...");
+    await this.initializeGlobalState();
+
+    // Deploy oracle program and initialize price feed
+    console.log("🔮 Setting up oracle program...");
+    await this.setupOracleProgram();
+
+    // Create entry token mint
+    console.log("🪙 Creating entry token mint...");
+    this._accounts.entryTokenMint = await this.createEntryTokenMint();
 
     this._initialized = true;
   }
 
   private async airdropToAccounts(): Promise<void> {
     const airdropPromises = [
-      this._provider!.connection.requestAirdrop(this._accounts!.admin.publicKey, TEST_CONFIG.AIRDROP_AMOUNT),
-      this._provider!.connection.requestAirdrop(this._accounts!.user1.publicKey, TEST_CONFIG.AIRDROP_AMOUNT),
-      this._provider!.connection.requestAirdrop(this._accounts!.user2.publicKey, TEST_CONFIG.AIRDROP_AMOUNT),
-      this._provider!.connection.requestAirdrop(this._accounts!.treasury.publicKey, TEST_CONFIG.AIRDROP_AMOUNT),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.admin.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.user1.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.user2.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.treasury.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
     ];
 
-    await Promise.all(airdropPromises);
+    const signatures = await Promise.all(airdropPromises);
+
+    // Wait for confirmations
+    for (const signature of signatures) {
+      await this._provider!.connection.confirmTransaction(signature);
+    }
+  }
+
+  private async initializeGlobalState(): Promise<void> {
+    const tx = await this._program.methods
+      .initializeGlobalState(
+        100,
+        this._accounts.treasury.publicKey,
+        this._accounts.permissionProgram.publicKey
+      )
+      .accounts({
+        globalState: this._pdas.globalStatePDA,
+        admin: this._accounts.admin.publicKey,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .signers([this._accounts.admin])
+      .rpc();
+
+    console.log("Global state initialization tx:", tx);
+  }
+
+  private async setupOracleProgram(): Promise<void> {
+    try {
+      const priceFeedPDA = this._pdas.priceFeedPDA;
+
+      // Check if price feed already exists
+      const existingAccount = await this._provider!.connection.getAccountInfo(
+        priceFeedPDA
+      );
+      if (existingAccount) {
+        console.log("Price feed already exists, skipping initialization");
+      } else {
+        // Initialize price feed with initial price of 100000 (100.000 with 3 decimals)
+        const initialPrice = 100_000_000; // 100.000 with 6 decimals
+
+        await this._oracleProgram.methods.initializePriceFeed(
+          new anchor.BN(initialPrice)
+        )
+          .accounts({
+            priceFeed: priceFeedPDA,
+            authority: this._accounts.admin.publicKey,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .signers([this._accounts.admin])
+          .rpc();
+
+        console.log(
+          "✅ Oracle price feed initialized with price: {}, PDA: {}",
+          initialPrice,
+          priceFeedPDA.toString()
+        );
+      }
+    } catch (error) {
+      console.error("❌ Failed to setup oracle program:", error);
+      throw error;
+    }
   }
 
   private async createEntryTokenMint(): Promise<PublicKey> {
@@ -143,7 +234,9 @@ export class GlobalTestState {
       console.log("Entry Token Mint:", entryTokenMint.toString());
 
       // Verify the mint account
-      const mintInfo = await this._provider!.connection.getAccountInfo(entryTokenMint);
+      const mintInfo = await this._provider!.connection.getAccountInfo(
+        entryTokenMint
+      );
       if (mintInfo) {
         console.log("✅ Mint account verified - it's a valid mint account");
       } else {
@@ -160,28 +253,45 @@ export class GlobalTestState {
   // Getters
   public get program(): Program<Tdf> {
     if (!this._program) {
-      throw new Error("Test environment not initialized. Call initialize() first.");
+      throw new Error(
+        "Test environment not initialized. Call initialize() first."
+      );
     }
     return this._program;
   }
 
+  public get oracleProgram(): Program<Oracle> {
+    if (!this._oracleProgram) {
+      throw new Error(
+        "Test environment not initialized. Call initialize() first."
+      );
+    }
+    return this._oracleProgram;
+  }
+
   public get provider(): anchor.AnchorProvider {
     if (!this._provider) {
-      throw new Error("Test environment not initialized. Call initialize() first.");
+      throw new Error(
+        "Test environment not initialized. Call initialize() first."
+      );
     }
     return this._provider;
   }
 
   public get accounts(): TestAccounts {
     if (!this._accounts) {
-      throw new Error("Test environment not initialized. Call initialize() first.");
+      throw new Error(
+        "Test environment not initialized. Call initialize() first."
+      );
     }
     return this._accounts;
   }
 
   public get pdas(): Partial<TestPDAs> {
     if (!this._pdas) {
-      throw new Error("Test environment not initialized. Call initialize() first.");
+      throw new Error(
+        "Test environment not initialized. Call initialize() first."
+      );
     }
     return this._pdas;
   }
@@ -212,18 +322,31 @@ export class GlobalTestState {
     )[0];
   }
 
-  public createPositionPDA(league: PublicKey, user: PublicKey, market: PublicKey, seqNum: number = 0): PublicKey {
+  public createPositionPDA(
+    league: PublicKey,
+    user: PublicKey,
+    market: PublicKey,
+    seqNum: number = 0
+  ): PublicKey {
     // Convert seqNum to little-endian bytes (8 bytes)
     const seqNumBuffer = Buffer.alloc(8);
     seqNumBuffer.writeBigUInt64LE(BigInt(seqNum));
-    
+
     return PublicKey.findProgramAddressSync(
-      [Buffer.from("position"), league.toBuffer(), user.toBuffer(), seqNumBuffer],
+      [
+        Buffer.from("position"),
+        league.toBuffer(),
+        user.toBuffer(),
+        seqNumBuffer,
+      ],
       this._program!.programId
     )[0];
   }
 
-  public async getRewardVaultATA(entryTokenMint: PublicKey, leaguePDA: PublicKey): Promise<PublicKey> {
+  public async getRewardVaultATA(
+    entryTokenMint: PublicKey,
+    leaguePDA: PublicKey
+  ): Promise<PublicKey> {
     return await getAssociatedTokenAddress(
       entryTokenMint,
       leaguePDA,
@@ -257,13 +380,21 @@ export class GlobalTestState {
     return userTokenAccount;
   }
 
-  public async verifyUserTokenBalance(userTokenAccount: PublicKey, expectedAmount?: number): Promise<void> {
-    const userTokenBalance = await getAccount(this._provider!.connection, userTokenAccount);
+  public async verifyUserTokenBalance(
+    userTokenAccount: PublicKey,
+    expectedAmount?: number
+  ): Promise<void> {
+    const userTokenBalance = await getAccount(
+      this._provider!.connection,
+      userTokenAccount
+    );
     console.log("User token balance:", userTokenBalance.amount.toString());
-    
+
     if (expectedAmount) {
       if (userTokenBalance.amount.toString() !== expectedAmount.toString()) {
-        throw new Error(`Expected ${expectedAmount} tokens, got ${userTokenBalance.amount.toString()}`);
+        throw new Error(
+          `Expected ${expectedAmount} tokens, got ${userTokenBalance.amount.toString()}`
+        );
       }
     }
   }
@@ -274,6 +405,7 @@ export const globalTestState = GlobalTestState.getInstance();
 
 // Convenience exports
 export const getProgram = () => globalTestState.program;
+export const getOracleProgram = () => globalTestState.oracleProgram;
 export const getProvider = () => globalTestState.provider;
 export const getAccounts = () => globalTestState.accounts;
 export const getPDAs = () => globalTestState.pdas;

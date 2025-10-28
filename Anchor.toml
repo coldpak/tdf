@@ -7,6 +7,7 @@ skip-lint = false
 
 [programs.localnet]
 tdf = "3jFHqM7VCceGLftStfrhLHHKRHBJZyteYuA5c63HXjuY"
+oracle = "6WPoE3jetRFmcfBnrmwukJGcHjwDkkSydHb3fcGp9a8n"
 
 [registry]
 url = "https://api.apr.dev"

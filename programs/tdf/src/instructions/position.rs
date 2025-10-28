@@ -19,7 +19,7 @@ pub struct OpenPosition<'info> {
     #[account(
         init,
         payer = user,
-        space = 8 + 32*4 + 8 + 1 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1,
+        space = 8 + 32*5 + 8 + 1 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1,
         seeds = [b"position", league.key().as_ref(), user.key().as_ref(), participant.current_position_seq.to_le_bytes().as_ref()],
         bump
     )]
@@ -61,6 +61,10 @@ pub fn open_position(
         seq_num == participant.current_position_seq,
         crate::errors::ErrorCode::InvalidPositionSequence
     );
+    require!(
+        ctx.accounts.oracle_feed.key() == market.oracle_feed,
+        crate::errors::ErrorCode::OracleMismatch
+    );
 
     let current_price = get_price_from_oracle(&ctx.accounts.oracle_feed)?;
     let notional = calculate_notional(current_price, size, market.decimals);
@@ -75,6 +79,8 @@ pub fn open_position(
     position.league = league.key();
     position.user = ctx.accounts.user.key();
     position.market = market.key();
+    position.market_decimals = market.decimals;
+    position.oracle_feed = ctx.accounts.oracle_feed.key();
     position.seq_num = participant.current_position_seq;
     position.direction = direction;
     position.size = size;
@@ -128,6 +134,10 @@ pub fn increase_position_size(ctx: Context<IncreasePositionSize>, size: i64) -> 
     require!(
         league.status == LeagueStatus::Active,
         crate::errors::ErrorCode::LeagueNotActive
+    );
+    require!(
+        ctx.accounts.oracle_feed.key() == market.oracle_feed,
+        crate::errors::ErrorCode::OracleMismatch
     );
 
     let leverage = position.leverage;
@@ -202,6 +212,10 @@ pub fn decrease_position_size(
     require!(
         league.status == LeagueStatus::Active,
         crate::errors::ErrorCode::LeagueNotActive
+    );
+    require!(
+        ctx.accounts.oracle_feed.key() == market.oracle_feed,
+        crate::errors::ErrorCode::OracleMismatch
     );
     require!(
         size_to_close <= position.size,

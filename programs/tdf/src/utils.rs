@@ -1,10 +1,16 @@
 use anchor_lang::prelude::*;
-use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::state::Direction;
+use crate::errors::ErrorCode;
 
-// Global mock price for testing
-static MOCK_PRICE: AtomicI64 = AtomicI64::new(188_000_000); // Default: 188 USD * 1e6
+// Define the Oracle PriceFeed struct locally to avoid global allocator conflicts
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceFeed {
+    pub price: i64,
+    pub last_updated: i64,
+    pub authority: Pubkey,
+    pub bump: u8,
+}
 
 pub fn dir_sign(direction: Direction) -> i64 {
   match direction {
@@ -35,31 +41,32 @@ pub fn calculate_unrealized_pnl(notional: i64, current_price: i64, size: i64, de
 }
 
 pub fn get_price_from_oracle(oracle_feed: &AccountInfo) -> Result<i64> {
-  // let price = oracle_feed.try_borrow_data()?.get(0..8)?.try_into().unwrap();
-  // Ok(u64::from_le_bytes(price));
+  let data = oracle_feed.try_borrow_data()?;
   
-  // Use mock price for testing
-  Ok(MOCK_PRICE.load(Ordering::Relaxed))
+  // Try to deserialize the PriceFeed account using Oracle's struct
+  match PriceFeed::try_from_slice(&data) {
+    Ok(price_feed) => {
+      if price_feed.price <= 0 {
+        return Err(ErrorCode::InvalidPrice.into());
+      }
+      Ok(price_feed.price)
+    }
+    Err(_) => {
+      // Fallback: manual parsing after discriminator
+      if data.len() < 16 {
+        return Err(ErrorCode::InvalidPrice.into());
+      }
+      
+      // Read price from bytes 8-16 (after discriminator)
+      let price_bytes: [u8; 8] = data[8..16].try_into().map_err(|_| ErrorCode::InvalidPrice)?;
+      let price = i64::from_le_bytes(price_bytes);
+      
+      if price <= 0 {
+        return Err(ErrorCode::InvalidPrice.into());
+      }
+      
+      Ok(price)
+    }
+  }
 }
 
-// Test helper functions for price manipulation
-#[cfg(test)]
-pub fn set_mock_price(price: i64) {
-  MOCK_PRICE.store(price, Ordering::Relaxed);
-}
-
-#[cfg(test)]
-pub fn get_mock_price() -> i64 {
-  MOCK_PRICE.load(Ordering::Relaxed)
-}
-
-// Allow dead code for test functions
-#[allow(dead_code)]
-pub fn set_mock_price_for_testing(price: i64) {
-  MOCK_PRICE.store(price, Ordering::Relaxed);
-}
-
-#[allow(dead_code)]
-pub fn get_mock_price_for_testing() -> i64 {
-  MOCK_PRICE.load(Ordering::Relaxed)
-}

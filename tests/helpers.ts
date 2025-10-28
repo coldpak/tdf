@@ -8,54 +8,26 @@ import {
 } from "@solana/spl-token";
 import { Program, BN, getProvider } from "@coral-xyz/anchor";
 import { Tdf } from "../target/types/tdf";
-import { TestAccounts, TestPDAs } from "./global-setup";
+import { Oracle } from "../target/types/oracle";
+import { TestAccounts, TestPDAs } from "./0_global-setup";
 
 // Test helper functions for common operations
-
 export class TestHelpers {
   private program: Program<Tdf>;
+  private oracleProgram: Program<Oracle>;
   private accounts: TestAccounts;
   private pdas: Partial<TestPDAs>;
 
   constructor(
     program: Program<Tdf>,
+    oracleProgram: Program<Oracle>,
     accounts: TestAccounts,
     pdas: Partial<TestPDAs>
   ) {
     this.program = program;
+    this.oracleProgram = oracleProgram;
     this.accounts = accounts;
     this.pdas = pdas;
-  }
-
-  // Initialize global state
-  async initializeGlobalState(feeBps: number = 100): Promise<string> {
-    try {
-      const tx = await this.program.methods
-        .initializeGlobalState(
-          feeBps,
-          this.accounts.treasury.publicKey,
-          this.accounts.permissionProgram.publicKey
-        )
-        .accounts({
-          globalState: this.pdas.globalStatePDA!,
-          admin: this.accounts.admin.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .signers([this.accounts.admin])
-        .rpc();
-
-      console.log("Global state initialization tx:", tx);
-      return tx;
-    } catch (error) {
-      if (error.message.includes("already in use")) {
-        console.log(
-          "Global state already initialized, skipping initialization"
-        );
-        return "already_initialized";
-      } else {
-        throw error;
-      }
-    }
   }
 
   // List a market
@@ -64,7 +36,8 @@ export class TestHelpers {
     decimals: number,
     maxLeverage: number,
     oracleFeed: PublicKey,
-    baseCurrency: PublicKey
+    baseCurrency: PublicKey,
+    user: Keypair // User who is listing the market
   ): Promise<string> {
     const symbolBuffer = Array.from(Buffer.from(symbol.padEnd(16, "\0")));
     const marketPDA = PublicKey.findProgramAddressSync(
@@ -79,10 +52,10 @@ export class TestHelpers {
         market: marketPDA,
         oracleFeed: oracleFeed,
         baseCurrency: baseCurrency,
-        admin: this.accounts.admin.publicKey,
+        admin: user.publicKey,
         systemProgram: SystemProgram.programId,
       } as any)
-      .signers([this.accounts.admin])
+      .signers([user])
       .rpc();
 
     console.log("Market listing tx:", tx);
@@ -166,7 +139,7 @@ export class TestHelpers {
     amount: number
   ): Promise<string> {
     const rewardVaultAta = await this.getRewardVaultATA(leaguePDA);
-    
+
     // Get existing user token account instead of creating/minting new tokens
     const userTokenAccount = await getAssociatedTokenAddress(
       this.accounts.entryTokenMint,
@@ -193,11 +166,27 @@ export class TestHelpers {
     return tx;
   }
 
+  // Close a league
+  async closeLeague(leaguePDA: PublicKey, user: Keypair): Promise<string> {
+    const tx = await this.program.methods
+      .closeLeague()
+      .accounts({
+        league: leaguePDA,
+        user: user.publicKey,
+      } as any)
+      .signers([user])
+      .rpc();
+
+    console.log("✅ Close league tx:", tx);
+    return tx;
+  }
+
   // Open a position
   async openPosition(
     user: Keypair,
     leaguePDA: PublicKey,
     marketPDA: PublicKey,
+    oracleFeed: PublicKey,
     participantPDA: PublicKey,
     positionPDA: PublicKey,
     direction: { long: {} } | { short: {} },
@@ -213,7 +202,7 @@ export class TestHelpers {
         market: marketPDA,
         participant: participantPDA,
         position: positionPDA,
-        oracleFeed: this.accounts.oracleFeed.publicKey,
+        oracleFeed: oracleFeed,
         systemProgram: SystemProgram.programId,
       } as any)
       .signers([user])
@@ -228,9 +217,10 @@ export class TestHelpers {
     user: Keypair,
     leaguePDA: PublicKey,
     marketPDA: PublicKey,
+    oracleFeed: PublicKey,
     participantPDA: PublicKey,
     positionPDA: PublicKey,
-    size: number,
+    size: number
   ): Promise<string> {
     const tx = await this.program.methods
       .increasePositionSize(new BN(size))
@@ -240,7 +230,7 @@ export class TestHelpers {
         market: marketPDA,
         participant: participantPDA,
         position: positionPDA,
-        oracleFeed: this.accounts.oracleFeed.publicKey,
+        oracleFeed: oracleFeed,
       } as any)
       .signers([user])
       .rpc();
@@ -253,6 +243,7 @@ export class TestHelpers {
   async decreasePositionSize(
     user: Keypair,
     leaguePDA: PublicKey,
+    oracleFeed: PublicKey,
     participantPDA: PublicKey,
     positionPDA: PublicKey,
     sizeToClose: number
@@ -265,7 +256,7 @@ export class TestHelpers {
         participant: participantPDA,
         position: positionPDA,
         market: this.pdas.marketPDA!,
-        oracleFeed: this.accounts.oracleFeed.publicKey,
+        oracleFeed: oracleFeed,
       } as any)
       .signers([user])
       .rpc();
@@ -307,6 +298,40 @@ export class TestHelpers {
     );
 
     return userTokenAccount;
+  }
+
+  // Set Oracle price
+  async setOraclePrice(
+    priceFeedPDA: PublicKey,
+    newPrice: number
+  ): Promise<string> {
+    if (!this.oracleProgram) {
+      throw new Error("Oracle program not set. Call setOracleProgram() first.");
+    }
+
+    const tx = await this.oracleProgram.methods
+      .setPrice(new BN(newPrice))
+      .accounts({
+        priceFeed: priceFeedPDA,
+        authority: this.accounts.admin.publicKey,
+      })
+      .signers([this.accounts.admin])
+      .rpc();
+
+    console.log(`✅ Oracle price updated to: ${newPrice}`);
+    return tx;
+  }
+
+  // Get Oracle price
+  async getOraclePrice(priceFeedPDA: PublicKey): Promise<number> {
+    if (!this.oracleProgram) {
+      throw new Error("Oracle program not set. Call setOracleProgram() first.");
+    }
+
+    const priceFeed = await this.oracleProgram.account.priceFeed.fetch(
+      priceFeedPDA
+    );
+    return priceFeed.price.toNumber();
   }
 }
 
@@ -422,18 +447,6 @@ export function expectPosition(
   expect(position.closedAt.toNumber()).to.equal(expected.closedAt);
 }
 
-// Price manipulation helpers for testing
-export function setMockPrice(price: number): void {
-  // This would need to be implemented in the Rust program
-  // For now, we'll use a different approach with multiple oracle feeds
-  console.log(`Setting mock price to: ${price}`);
-}
-
-export function getMockPrice(): number {
-  // This would need to be implemented in the Rust program
-  return 188_000_000; // Default price
-}
-
 // PnL calculation helpers for verification
 export function calculateExpectedPnL(
   entryPrice: number,
@@ -445,8 +458,8 @@ export function calculateExpectedPnL(
   const scale = Math.pow(10, decimals);
   const notional = (entryPrice * size) / scale;
   const currentValue = (currentPrice * size) / scale;
-  const directionSign = 'long' in direction ? 1 : -1;
-  
+  const directionSign = "long" in direction ? 1 : -1;
+
   return (currentValue - notional) * directionSign;
 }
 

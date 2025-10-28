@@ -92,4 +92,9 @@ pub mod tdf {
     pub fn decrease_position_size(ctx: Context<DecreasePositionSize>, size_to_close: i64) -> Result<()> {
         instructions::decrease_position_size(ctx, size_to_close)
     }
+
+    // Refresh participant instruction
+    pub fn refresh_participant<'info>(ctx: Context<'_, '_, 'info, 'info, RefreshParticipant<'info>>) -> Result<()> {
+        instructions::refresh_participant(ctx)
+    }
 }

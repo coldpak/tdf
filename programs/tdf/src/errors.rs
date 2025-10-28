@@ -42,4 +42,10 @@ pub enum ErrorCode {
     InvalidPrice,
     #[msg("Invalid refresh accounts")]
     InvalidRefreshAccounts,
+    #[msg("Position mismatch")]
+    PositionMismatch,
+    #[msg("Oracle mismatch")]
+    OracleMismatch,
+    #[msg("Math overflow")]
+    MathOverflow,
 }

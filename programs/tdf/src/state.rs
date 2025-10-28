@@ -96,6 +96,8 @@ pub struct Position {
     pub league: Pubkey,
     pub user: Pubkey,
     pub market: Pubkey,
+    pub market_decimals: u8,
+    pub oracle_feed: Pubkey,
     pub seq_num: u64, // sequence number for position tracking
 
     pub direction: Direction,
