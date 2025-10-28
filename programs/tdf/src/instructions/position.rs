@@ -1,7 +1,10 @@
 use anchor_lang::prelude::*;
 
 use crate::state::{Direction, League, LeagueStatus, Market, Participant, Position};
-use crate::utils::{calculate_notional, calculate_unrealized_pnl, dir_sign, get_price_from_oracle};
+use crate::utils::{
+    calculate_notional, calculate_price_from_notional_and_size, calculate_unrealized_pnl, dir_sign,
+    get_price_from_oracle,
+};
 
 // TODO: participant should be updated in realtime to avoid liquidation risk
 #[derive(Accounts)]
@@ -69,7 +72,9 @@ pub fn open_position(
     let current_price = get_price_from_oracle(&ctx.accounts.oracle_feed)?;
     let notional = calculate_notional(current_price, size, market.decimals);
 
-    let required_margin = notional / leverage as i64;
+    let required_margin = notional
+        .checked_div(leverage as i64)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     require!(
         participant.available_balance() >= required_margin,
         crate::errors::ErrorCode::InsufficientMargin
@@ -91,10 +96,19 @@ pub fn open_position(
     position.opened_at = Clock::get()?.unix_timestamp;
     position.bump = ctx.bumps.position;
 
-    // Update participant
-    participant.total_volume += notional;
-    participant.used_margin += required_margin;
-    participant.current_position_seq += 1;
+    // Update participant with overflow protection
+    participant.total_volume = participant
+        .total_volume
+        .checked_add(notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.used_margin = participant
+        .used_margin
+        .checked_add(required_margin)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.current_position_seq = participant
+        .current_position_seq
+        .checked_add(1)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     participant.positions.push(position.key());
 
     msg!("New position opened at price {}", current_price);
@@ -145,34 +159,62 @@ pub fn increase_position_size(ctx: Context<IncreasePositionSize>, size: i64) -> 
     let current_price = get_price_from_oracle(&ctx.accounts.oracle_feed)?;
     let new_notional = calculate_notional(current_price, size, market.decimals);
 
-    let additional_margin = new_notional / leverage as i64;
+    let additional_margin = new_notional
+        .checked_div(leverage as i64)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     require!(
         participant.available_balance() >= additional_margin,
         crate::errors::ErrorCode::InsufficientMargin
     );
 
-    // Update entry stats
-    let prev_entry_notional = calculate_notional(position.entry_price, position.entry_size, market.decimals);
-    position.entry_size += size;
-    let new_entry_notional = prev_entry_notional + new_notional;
+    // Update entry stats with overflow protection
+    let prev_entry_notional =
+        calculate_notional(position.entry_price, position.entry_size, market.decimals);
+    position.entry_size = position
+        .entry_size
+        .checked_add(size)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    let new_entry_notional = prev_entry_notional
+        .checked_add(new_notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     position.entry_price = new_entry_notional / position.entry_size;
 
-    // Update realtime stats
+    // Update realtime stats with overflow protection
     let prev_upnl = position.unrealized_pnl;
-    position.size += size;
-    position.notional += new_notional;
+    position.size = position
+        .size
+        .checked_add(size)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    position.notional = position
+        .notional
+        .checked_add(new_notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     position.unrealized_pnl = calculate_unrealized_pnl(
         position.notional,
         current_price,
         position.size,
         market.decimals,
-        position.direction.clone()
+        position.direction.clone(),
     );
 
-    // Update participant
-    participant.used_margin += additional_margin;
-    participant.total_volume += new_notional;
-    participant.unrealized_pnl += position.unrealized_pnl - prev_upnl;
+    // Update participant with overflow protection
+    participant.used_margin = participant
+        .used_margin
+        .checked_add(additional_margin)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.total_volume = participant
+        .total_volume
+        .checked_add(new_notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+    let upnl_delta = position
+        .unrealized_pnl
+        .checked_sub(prev_upnl)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.unrealized_pnl = participant
+        .unrealized_pnl
+        .checked_add(upnl_delta)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
 
     msg!("Position size increased to {}", position.size);
 
@@ -215,7 +257,10 @@ pub fn decrease_position_size(
     let current_price = get_price_from_oracle(&ctx.accounts.oracle_feed)?;
 
     require!(current_price > 0, crate::errors::ErrorCode::InvalidPrice);
-    require!(size_to_close > 0, crate::errors::ErrorCode::InvalidPositionSize);
+    require!(
+        size_to_close > 0,
+        crate::errors::ErrorCode::InvalidPositionSize
+    );
     require!(
         league.status == LeagueStatus::Active,
         crate::errors::ErrorCode::LeagueNotActive
@@ -230,37 +275,85 @@ pub fn decrease_position_size(
     );
     let prev_upnl = position.unrealized_pnl;
 
-    // Calculate realized PnL
-    let closing_equity = current_price.checked_mul(size_to_close).expect("closing equity overflow");
+    // Calculate realized PnL with overflow protection
+    let closing_equity = calculate_notional(current_price, size_to_close, market.decimals);
     let closing_notional = calculate_notional(position.entry_price, size_to_close, market.decimals);
     let realized_pnl = (closing_equity as i64 - closing_notional as i64)
-        * dir_sign(position.direction.clone()) as i64;
-    let prev_locked = position.notional / position.leverage as i64;
-    let new_locked = (position.notional - closing_notional) / position.leverage as i64;
-    let released_margin = prev_locked - new_locked;
+        .checked_mul(dir_sign(position.direction.clone()) as i64)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    let prev_locked = position
+        .notional
+        .checked_div(position.leverage as i64)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    let new_locked = position
+        .notional
+        .checked_sub(closing_notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?
+        .checked_div(position.leverage as i64)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    let released_margin = prev_locked
+        .checked_sub(new_locked)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
 
-    // Calculate closed stats
-    position.closed_size += size_to_close;
-    position.closed_equity += closing_equity;
-    position.closed_price = position.closed_equity / position.closed_size;
-    position.closed_pnl += realized_pnl;
+    // Calculate closed stats with overflow protection
+    position.closed_size = position
+        .closed_size
+        .checked_add(size_to_close)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    position.closed_equity = position
+        .closed_equity
+        .checked_add(closing_equity)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    position.closed_price = calculate_price_from_notional_and_size(
+        position.closed_equity,
+        position.closed_size,
+        market.decimals,
+    );
+    position.closed_pnl = position
+        .closed_pnl
+        .checked_add(realized_pnl)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
 
-    // Update position
-    position.size -= size_to_close;
-    position.notional -= closing_notional;
+    // Update position with overflow protection
+    position.size = position
+        .size
+        .checked_sub(size_to_close)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    position.notional = position
+        .notional
+        .checked_sub(closing_notional)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
     position.unrealized_pnl = calculate_unrealized_pnl(
         position.notional,
         current_price,
         position.size,
         market.decimals,
-        position.direction.clone()
+        position.direction.clone(),
     );
 
-    // Update participant
-    participant.total_volume += closing_equity;
-    participant.used_margin -= released_margin;
-    participant.virtual_balance = participant.virtual_balance + realized_pnl + released_margin;
-    participant.unrealized_pnl += position.unrealized_pnl - prev_upnl;
+    // Update participant with overflow protection
+    participant.total_volume = participant
+        .total_volume
+        .checked_add(closing_equity)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.used_margin = participant
+        .used_margin
+        .checked_sub(released_margin)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+    participant.virtual_balance = participant
+        .virtual_balance
+        .checked_add(realized_pnl)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+    let upnl_delta = position
+        .unrealized_pnl
+        .checked_sub(prev_upnl)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+    participant.unrealized_pnl = participant
+        .unrealized_pnl
+        .checked_add(upnl_delta)
+        .ok_or(crate::errors::ErrorCode::MathOverflow)?;
 
     msg!(
         "Position size decreased to {}, PnL: {}",
@@ -272,14 +365,8 @@ pub fn decrease_position_size(
         // close position logic here
         position.closed_at = Clock::get()?.unix_timestamp;
         // remove position from participant.positions vector
-        if let Some(idx) = participant
-            .positions
-            .iter()
-            .position(|p| p == &position.key())
-        {
-            participant.positions.remove(idx);
-        }
-        msg!("Position closed");
+        participant.positions.retain(|p| p != &position.key());
+        msg!("Position closed and removed from participant");
     }
 
     Ok(())

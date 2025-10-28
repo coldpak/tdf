@@ -1,8 +1,4 @@
 import { expect } from "chai";
-import { PublicKey, Keypair } from "@solana/web3.js";
-import { Program, BN } from "@coral-xyz/anchor";
-import { Tdf } from "../target/types/tdf";
-import { Oracle } from "../target/types/oracle";
 import {
   globalTestState,
   getProgram,
@@ -42,7 +38,7 @@ describe("PnL Tests with Oracle Price Changes", () => {
     console.log("pdas.priceFeedPDA", pdas.priceFeedPDA.toString());
     // Set initial oracle price
     await testHelpers.setOraclePrice(pdas.priceFeedPDA, INITIAL_PRICE);
-    console.log(`✅ Initial oracle price set to: ${INITIAL_PRICE}`);
+    console.log(`✅ Initial oracle price set to: ${formatDollars(INITIAL_PRICE.toString())}`);
 
     // First list the market
     const symbol = "BTC/USDC";
@@ -141,19 +137,19 @@ describe("PnL Tests with Oracle Price Changes", () => {
         participantPDA
       );
       console.log("Initial participant state:", {
-        unrealizedPnl: initialParticipant.unrealizedPnl.toString(),
-        usedMargin: initialParticipant.usedMargin.toString(),
-        virtualBalance: initialParticipant.virtualBalance.toString(),
-        equity: (
+        unrealizedPnl: `$${formatDollars(initialParticipant.unrealizedPnl.toString())}`,
+        usedMargin: `$${formatDollars(initialParticipant.usedMargin.toString())}`,
+        virtualBalance: `$${formatDollars(initialParticipant.virtualBalance.toString())}`,
+        equity: `$${formatDollars((
           initialParticipant.virtualBalance.toNumber() +
           initialParticipant.unrealizedPnl.toNumber()
-        ).toString(),
+        ).toString())}`,
       });
 
       // Increase price by 10%
       const newPrice = Math.floor(INITIAL_PRICE * 1.1); // $110
       await testHelpers.setOraclePrice(pdas.priceFeedPDA, newPrice);
-      console.log(`✅ Price increased to: ${newPrice}`);
+      console.log(`✅ Price increased to: ${formatDollars(newPrice.toString())}`);
 
       // Refresh participant to update PnL
       await refreshParticipantWithPositions();
@@ -179,7 +175,7 @@ describe("PnL Tests with Oracle Price Changes", () => {
       // Decrease price by 15%
       const newPrice = Math.floor(INITIAL_PRICE * 0.85); // $85
       await testHelpers.setOraclePrice(pdas.priceFeedPDA, newPrice);
-      console.log(`✅ Price decreased to: ${newPrice}`);
+      console.log(`✅ Price decreased to: ${formatDollars(newPrice.toString())}`);
 
       // Refresh participant
       await refreshParticipantWithPositions();
@@ -197,8 +193,8 @@ describe("PnL Tests with Oracle Price Changes", () => {
       );
 
       console.log("PnL Verification (Price Decrease):", {
-        expectedPnL,
-        actualPnL: updatedParticipant.unrealizedPnl.toString(),
+        expectedPnL: `$${formatDollars(expectedPnL.toString())}`,
+        actualPnL: `$${formatDollars(updatedParticipant.unrealizedPnl.toString())}`,
         priceChange: `${(
           ((newPrice - INITIAL_PRICE) / INITIAL_PRICE) *
           100
@@ -248,7 +244,7 @@ describe("PnL Tests with Oracle Price Changes", () => {
       // Increase price (bad for short position)
       const newPrice = Math.floor(INITIAL_PRICE * 1.2); // $120
       await testHelpers.setOraclePrice(pdas.priceFeedPDA, newPrice);
-      console.log(`✅ Price increased to: ${newPrice} (bad for short)`);
+      console.log(`✅ Price increased to: ${formatDollars(newPrice.toString())} (bad for short)`);
 
       await refreshParticipantWithPositions();
 
@@ -265,8 +261,8 @@ describe("PnL Tests with Oracle Price Changes", () => {
       );
 
       console.log("Short Position PnL Verification:", {
-        expectedPnL,
-        actualPnL: updatedParticipant.unrealizedPnl.toString(),
+        expectedPnL: `$${formatDollars(expectedPnL.toString())}`,
+        actualPnL: `$${formatDollars(updatedParticipant.unrealizedPnl.toString())}`,
         priceChange: `${(
           ((newPrice - INITIAL_PRICE) / INITIAL_PRICE) *
           100
@@ -289,7 +285,7 @@ describe("PnL Tests with Oracle Price Changes", () => {
 
       for (const movement of priceMovements) {
         await testHelpers.setOraclePrice(pdas.priceFeedPDA, movement.price);
-        console.log(`✅ Price ${movement.description}: ${movement.price}`);
+        console.log(`✅ Price ${movement.description}: ${formatDollars(movement.price.toString())}`);
 
         await refreshParticipantWithPositions();
 
@@ -305,12 +301,12 @@ describe("PnL Tests with Oracle Price Changes", () => {
         );
 
         console.log(`PnL at ${movement.description}:`, {
-          expectedPnL,
-          actualPnL: participant.unrealizedPnl.toString(),
-          equity: (
+          expectedPnL: `$${formatDollars(expectedPnL.toString())}`,
+          actualPnL: `$${formatDollars(participant.unrealizedPnl.toString())}`,
+          equity: `$${formatDollars((
             participant.virtualBalance.toNumber() +
             participant.unrealizedPnl.toNumber()
-          ).toString(),
+          ).toString())}`,
         });
 
         expect(participant.unrealizedPnl.toString()).to.equal(
@@ -344,7 +340,7 @@ describe("PnL Tests with Oracle Price Changes", () => {
       // Set a new price
       const newPrice = Math.floor(INITIAL_PRICE * 1.15); // $115
       await testHelpers.setOraclePrice(pdas.priceFeedPDA, newPrice);
-      console.log(`✅ Price set to: ${newPrice} for multiple positions`);
+      console.log(`✅ Price set to: ${formatDollars(newPrice.toString())} for multiple positions`);
 
       await refreshParticipantWithPositions();
 
@@ -373,16 +369,126 @@ describe("PnL Tests with Oracle Price Changes", () => {
         shortPnL,
         longPnL,
         expectedCombinedPnL,
-        actualCombinedPnL: participant.unrealizedPnl.toString(),
-        totalEquity: (
+        actualCombinedPnL: `$${formatDollars(participant.unrealizedPnl.toString())}`,
+        totalEquity: `$${formatDollars((
           participant.virtualBalance.toNumber() +
           participant.unrealizedPnl.toNumber()
-        ).toString(),
+        ).toString())}`,
       });
 
       expect(participant.unrealizedPnl.toString()).to.equal(
         expectedCombinedPnL.toString()
       );
+    });
+
+    it("Should liquidate all positions when equity drops below zero", async () => {
+      // Ensure price is at initial
+      await testHelpers.setOraclePrice(pdas.priceFeedPDA, INITIAL_PRICE);
+
+      const participant = await getProgram().account.participant.fetch(
+        participantPDA
+      );
+      console.log("Participant before liquidation:", {
+        positions: participant.positions.length,
+        usedMargin: `$${formatDollars(participant.usedMargin.toString())}`,
+        unrealizedPnl: participant.unrealizedPnl.toString(),
+        totalVolume: `$${formatDollars(participant.totalVolume.toString())}`,
+        equity: `$${formatDollars((
+          participant.virtualBalance.toNumber() +
+          participant.unrealizedPnl.toNumber()
+        ).toString())}`,
+      });
+      const availableBalance = participant.virtualBalance.toNumber() + participant.unrealizedPnl.toNumber() - participant.usedMargin.toNumber();
+
+      // Open a very large long position at max leverage to exhaust margin
+      const liquidationSeq = 3;
+      const bigPositionPDA = globalTestState.createPositionPDA(
+        leaguePDA,
+        accounts.user1.publicKey,
+        pdas.marketPDA,
+        liquidationSeq
+      );
+
+      // size = (virtual_balance / price) * max_leverage tokens (with decimals)
+      const sizeToLiquidate = Math.floor(
+        (availableBalance / INITIAL_PRICE) *
+          TEST_CONFIG.MAX_LEVERAGE *
+          1_000_000
+      );
+      console.log("Size to liquidate:", sizeToLiquidate / TEST_CONFIG.MAX_LEVERAGE / 1_000_000);
+
+      await testHelpers.openPosition(
+        accounts.user1,
+        leaguePDA,
+        pdas.marketPDA,
+        pdas.priceFeedPDA,
+        participantPDA,
+        bigPositionPDA,
+        { long: {} },
+        sizeToLiquidate,
+        TEST_CONFIG.MAX_LEVERAGE,
+        liquidationSeq
+      );
+
+      // Crash price to force very large negative PnL
+      await testHelpers.setOraclePrice(pdas.priceFeedPDA, 90_000_000);
+      
+      const liquidatableParticipant = await getProgram().account.participant.fetch(
+        participantPDA
+      );
+      console.log("Liquidatable participant:", {
+        positions: liquidatableParticipant.positions.length,
+        totalVolume: `$${formatDollars(liquidatableParticipant.totalVolume.toString())}`,
+        usedMargin: `$${formatDollars(liquidatableParticipant.usedMargin.toString())}`,
+        unrealizedPnl: `$${formatDollars(liquidatableParticipant.unrealizedPnl.toString())}`,
+        virtualBalance: `$${formatDollars(liquidatableParticipant.virtualBalance.toString())}`,
+      });
+
+      // Trigger refresh which should auto-liquidate
+      await refreshParticipantWithPositions();
+
+      const participantAfter = await getProgram().account.participant.fetch(
+        participantPDA
+      );
+
+      // log participant after liquidation
+      console.log("Participant after liquidation:", {
+        positions: participantAfter.positions.length,
+        totalVolume: `$${formatDollars(participantAfter.totalVolume.toString())}`,
+        usedMargin: `$${formatDollars(participantAfter.usedMargin.toString())}`,
+        unrealizedPnl: `$${formatDollars(participantAfter.unrealizedPnl.toString())}`,
+        virtualBalance: `$${formatDollars(participantAfter.virtualBalance.toString())}`,
+      });
+
+      // After liquidation, all positions cleared and margins/PnL reset
+      expect(participantAfter.positions.length).to.equal(0);
+      expect(participantAfter.usedMargin.toString()).to.equal("0");
+      expect(participantAfter.unrealizedPnl.toString()).to.equal("0");
+
+      // The big position should be closed
+      const closedBigPos = await getProgram().account.position.fetch(
+        bigPositionPDA
+      );
+
+      // log closed big position
+      console.log("Closed big position:", {
+        size: closedBigPos.size.toString(),
+        notional: `$${formatDollars(closedBigPos.notional.toString())}`,
+        unrealizedPnl: `$${formatDollars(closedBigPos.unrealizedPnl.toString())}`,
+        entryPrice: `$${formatDollars(closedBigPos.entryPrice.toString())}`,
+        entrySize: closedBigPos.entrySize.toString(),
+        leverage: closedBigPos.leverage.toString(),
+        direction: closedBigPos.direction.toString(),
+        openedAt: closedBigPos.openedAt.toNumber(),
+        closedAt: closedBigPos.closedAt.toNumber(),
+        closedSize: closedBigPos.closedSize.toString(),
+        closedEquity: `$${formatDollars(closedBigPos.closedEquity.toString())}`,
+        closedPrice: `$${formatDollars(closedBigPos.closedPrice.toString())}`,
+        closedPnl: `$${formatDollars(closedBigPos.closedPnl.toString())}`,
+      });
+
+      expect(closedBigPos.size.toString()).to.equal("0");
+      expect(closedBigPos.closedAt.toNumber()).to.be.greaterThan(0);
     });
   });
 
@@ -423,4 +529,12 @@ describe("PnL Tests with Oracle Price Changes", () => {
     console.log("✅ Refresh participant tx:", tx);
     return tx;
   }
+
+  function formatDollars(num: string) {
+    return (Number(num) / 1000000).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
 });
+

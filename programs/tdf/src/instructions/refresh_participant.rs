@@ -1,5 +1,8 @@
 use crate::state::{League, Participant, Position};
-use crate::utils::{calculate_unrealized_pnl, get_price_from_oracle};
+use crate::utils::{
+    calculate_notional, calculate_price_from_notional_and_size, calculate_unrealized_pnl,
+    get_price_from_oracle,
+};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
@@ -25,7 +28,7 @@ pub fn refresh_participant<'info>(
 ) -> Result<()> {
     let participant = &mut ctx.accounts.participant;
     let remaining: &[AccountInfo<'info>] = ctx.remaining_accounts;
-    let position_keys = &participant.positions;
+    let position_keys = &participant.positions.clone();
 
     require!(
         remaining.len() == position_keys.len() * 2,
@@ -34,6 +37,7 @@ pub fn refresh_participant<'info>(
 
     let mut total_upnl: i64 = 0;
     let mut total_used_margin: i64 = 0;
+    let mut prices: Vec<i64> = Vec::new();
 
     for (i, position_key) in position_keys.iter().enumerate() {
         let position_ai = &remaining[i * 2];
@@ -50,6 +54,7 @@ pub fn refresh_participant<'info>(
 
         // if position is closed, skip
         if position.size == 0 {
+            prices.push(0); // placeholder for closed positions
             continue;
         }
 
@@ -60,6 +65,7 @@ pub fn refresh_participant<'info>(
         );
 
         let price = get_price_from_oracle(&oracle_ai)?;
+        prices.push(price);
 
         let new_upnl = calculate_unrealized_pnl(
             position.notional,
@@ -97,29 +103,93 @@ pub fn refresh_participant<'info>(
         participant.equity()
     );
 
-    // if participant.equity() < 0 {
-    //     msg!("💥 Auto liquidation triggered");
-    //     for (i, position_key) in position_keys.iter().enumerate() {
-    //         let position_ai = &remaining[i * 2];
-    //         let oracle_ai = &remaining[i * 2 + 1];
+    if participant.equity() < 0 {
+        msg!("💥 Auto liquidation triggered");
+        for (i, position_key) in position_keys.iter().enumerate() {
+            let position_ai = &remaining[i * 2];
 
-    //         let mut data = position_ai.try_borrow_mut_data()?;
-    //         let mut position: Position = Position::try_deserialize(&mut &data[..])?;
+            let mut data = position_ai.try_borrow_mut_data()?;
+            let mut position: Position = Position::try_deserialize(&mut &data[..])?;
 
-    //         if position.size == 0 {
-    //             continue;
-    //         }
+            if position.size == 0 {
+                continue;
+            }
 
-    //         let realized_pnl = position.unrealized_pnl;
-    //         let released_margin = position.notional / position.leverage as i64;
+            let price = prices[i];
+            let realized_pnl = position.unrealized_pnl;
+            let released_margin = position
+                .notional
+                .checked_div(position.leverage as i64)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+            let closing_equity = calculate_notional(price, position.size, position.market_decimals);
 
-    //         // Calculate closed stats
-    //         position.closed_size += position.size;
-    //         position.closed_notional += position.notional;
-    //         position.closed_price = position.closed_notional / position.closed_size;
-    //         position.closed_pnl += realized_pnl;
-    //     }
-    // }
+            // Calculate closed stats with overflow protection
+            position.closed_size = position
+                .closed_size
+                .checked_add(position.size)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            position.closed_equity = position
+                .closed_equity
+                .checked_add(closing_equity)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            // Safe division for closed_price
+            if position.closed_size > 0 {
+                position.closed_price = calculate_price_from_notional_and_size(
+                    position.closed_equity,
+                    position.closed_size,
+                    position.market_decimals,
+                );
+            }
+
+            position.closed_pnl = position
+                .closed_pnl
+                .checked_add(realized_pnl)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            // Update position
+            position.size = 0;
+            position.notional = 0;
+            position.unrealized_pnl = 0;
+            position.closed_at = Clock::get()?.unix_timestamp;
+
+            // Update participant with overflow protection
+            participant.total_volume = participant
+                .total_volume
+                .checked_add(closing_equity)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            participant.used_margin = participant
+                .used_margin
+                .checked_sub(released_margin)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            participant.virtual_balance = participant
+                .virtual_balance
+                .checked_add(realized_pnl)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            participant.unrealized_pnl = participant
+                .unrealized_pnl
+                .checked_sub(realized_pnl)
+                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
+
+            msg!(
+                "Position liquidated: {} (realized_pnl: {}, released_margin: {})",
+                position_key,
+                realized_pnl,
+                released_margin
+            );
+
+            let mut dst = &mut data[..];
+            position.try_serialize(&mut dst)?;
+        }
+
+        // Clear all positions after liquidation
+        participant.positions.clear();
+        msg!("All positions liquidated. Participant equity reset.");
+    }
 
     Ok(())
 }

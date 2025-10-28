@@ -318,7 +318,10 @@ export class TestHelpers {
       .signers([this.accounts.admin])
       .rpc();
 
-    console.log(`✅ Oracle price updated to: ${newPrice}`);
+    console.log(`✅ Oracle price updated to: ${(newPrice / 1000000).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`);
     return tx;
   }
 

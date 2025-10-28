@@ -390,6 +390,19 @@
 //       expect(updatedPosition.direction).to.deep.equal({ long: {} });
 
 //       console.log("✅ Position size decreased successfully");
+
+//       const position = await getProgram().account.position.fetch(
+//         positionPDA0
+//       );
+//       console.log("Position after size decrease:", {
+//         size: position.size.toString(),
+//         notional: position.notional.toString(),
+//         unrealizedPnl: position.unrealizedPnl.toString(),
+//         closedSize: position.closedSize.toString(),
+//         closedEquity: position.closedEquity.toString(),
+//         closedPrice: position.closedPrice.toString(),
+//         closedPnl: position.closedPnl.toString(),
+//       });
 //     });
 
 //     it("Should fail to decrease position size with invalid size", async () => {
