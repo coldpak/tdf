@@ -102,6 +102,7 @@ pub struct Position {
 
     pub direction: Direction,
     pub entry_price: i64, // average price in price-decimal (1e6)
+    pub entry_size: i64,  // token amount of entry size
     pub leverage: u8,     // e.g. 5x
 
     // Realtime stats
@@ -112,10 +113,10 @@ pub struct Position {
     pub opened_at: i64,
     pub closed_at: i64,
 
-    pub closed_size: i64,     // size closed so far
-    pub closed_price: i64,    // price in price-decimal (1e6)
-    pub closed_notional: i64, // closed_price * size (1e6)
-    pub closed_pnl: i64,      // (closed_notional - notional) * direction
+    pub closed_size: i64,   // size closed so far
+    pub closed_price: i64,  // price in price-decimal (1e6)
+    pub closed_equity: i64, // closed_price * size (1e6)
+    pub closed_pnl: i64,    // (closed_notional - notional) * direction
 
     pub bump: u8,
 }

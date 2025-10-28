@@ -97,5 +97,29 @@ pub fn refresh_participant<'info>(
         participant.equity()
     );
 
+    // if participant.equity() < 0 {
+    //     msg!("💥 Auto liquidation triggered");
+    //     for (i, position_key) in position_keys.iter().enumerate() {
+    //         let position_ai = &remaining[i * 2];
+    //         let oracle_ai = &remaining[i * 2 + 1];
+
+    //         let mut data = position_ai.try_borrow_mut_data()?;
+    //         let mut position: Position = Position::try_deserialize(&mut &data[..])?;
+
+    //         if position.size == 0 {
+    //             continue;
+    //         }
+
+    //         let realized_pnl = position.unrealized_pnl;
+    //         let released_margin = position.notional / position.leverage as i64;
+
+    //         // Calculate closed stats
+    //         position.closed_size += position.size;
+    //         position.closed_notional += position.notional;
+    //         position.closed_price = position.closed_notional / position.closed_size;
+    //         position.closed_pnl += realized_pnl;
+    //     }
+    // }
+
     Ok(())
 }

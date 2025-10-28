@@ -83,6 +83,7 @@ pub fn open_position(
     position.oracle_feed = ctx.accounts.oracle_feed.key();
     position.seq_num = participant.current_position_seq;
     position.direction = direction;
+    position.entry_size = size;
     position.size = size;
     position.entry_price = current_price;
     position.notional = notional;
@@ -150,10 +151,16 @@ pub fn increase_position_size(ctx: Context<IncreasePositionSize>, size: i64) -> 
         crate::errors::ErrorCode::InsufficientMargin
     );
 
+    // Update entry stats
+    let prev_entry_notional = calculate_notional(position.entry_price, position.entry_size, market.decimals);
+    position.entry_size += size;
+    let new_entry_notional = prev_entry_notional + new_notional;
+    position.entry_price = new_entry_notional / position.entry_size;
+
+    // Update realtime stats
     let prev_upnl = position.unrealized_pnl;
     position.size += size;
     position.notional += new_notional;
-    position.entry_price = position.notional / position.size;
     position.unrealized_pnl = calculate_unrealized_pnl(
         position.notional,
         current_price,
@@ -234,8 +241,8 @@ pub fn decrease_position_size(
 
     // Calculate closed stats
     position.closed_size += size_to_close;
-    position.closed_notional += closing_notional;
-    position.closed_price = position.closed_notional / position.closed_size;
+    position.closed_equity += closing_equity;
+    position.closed_price = position.closed_equity / position.closed_size;
     position.closed_pnl += realized_pnl;
 
     // Update position
@@ -250,7 +257,7 @@ pub fn decrease_position_size(
     );
 
     // Update participant
-    participant.total_volume += closing_notional;
+    participant.total_volume += closing_equity;
     participant.used_margin -= released_margin;
     participant.virtual_balance = participant.virtual_balance + realized_pnl + released_margin;
     participant.unrealized_pnl += position.unrealized_pnl - prev_upnl;
