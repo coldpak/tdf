@@ -170,11 +170,6 @@ pub fn refresh_participant<'info>(
                 .checked_add(realized_pnl)
                 .ok_or(crate::errors::ErrorCode::MathOverflow)?;
 
-            participant.unrealized_pnl = participant
-                .unrealized_pnl
-                .checked_sub(realized_pnl)
-                .ok_or(crate::errors::ErrorCode::MathOverflow)?;
-
             msg!(
                 "Position liquidated: {} (realized_pnl: {}, released_margin: {})",
                 position_key,
@@ -188,6 +183,7 @@ pub fn refresh_participant<'info>(
 
         // Clear all positions after liquidation
         participant.positions.clear();
+        participant.unrealized_pnl = 0;
         msg!("All positions liquidated. Participant equity reset.");
     }
 
