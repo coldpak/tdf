@@ -2,9 +2,10 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{Token};
 
-use crate::state::{League, LeagueStatus, Participant};
+use crate::state::{Leaderboard, League, LeagueStatus, Participant};
 
 /// Market is bounded to 10
+/// top k is bounded to 50
 #[derive(Accounts)]
 #[instruction(start_ts: i64, end_ts: i64, entry_amount: u64, markets: Vec<Pubkey>, metadata_uri: String, max_participants: u32, virtual_on_deposit: u64, max_leverage: u8, nonce: u8)]
 pub struct CreateLeague<'info> {
@@ -14,11 +15,20 @@ pub struct CreateLeague<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + (4 + (32 * 10)) + 8 + 8 + 1 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
+        space = 8 + 32 + (4 + 32 * 50) + 8 + 8 + 1 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
         seeds = [b"league", creator.key().as_ref(), &[nonce]],
         bump
     )]
     pub league: Account<'info, League>,
+
+    #[account(
+      init,
+      payer = creator,
+      space = 8 + 32 + (4 + 32 * 50) + 8 + 8 + 1 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
+      seeds = [b"leaderboard", league.key().as_ref()],
+      bump
+    )]
+    pub leaderboard: Account<'info, Leaderboard>,
 
     /// CHECK: Entry token mint - validated by the token program
     pub entry_token_mint: AccountInfo<'info>,
@@ -43,6 +53,7 @@ pub fn create_league(
     virtual_on_deposit: i64,
     max_leverage: u8,
     nonce: u8,
+    k: u16,
 ) -> Result<()> {
     // Validate markets vector size (max 10 markets)
     require!(
@@ -50,8 +61,8 @@ pub fn create_league(
         crate::errors::ErrorCode::InvalidMarketsLength
     );
 
-    let bump = ctx.bumps.league;
     let league = &mut ctx.accounts.league;
+    let leaderboard = &mut ctx.accounts.leaderboard;
     let entry_token_mint = ctx.accounts.entry_token_mint.key();
 
     let reward_vault_ata = get_associated_token_address(&league.key(), &entry_token_mint);
@@ -61,6 +72,12 @@ pub fn create_league(
         ctx.accounts.reward_vault.key(),
         reward_vault_ata,
         crate::errors::ErrorCode::InvalidRewardVault
+    );
+
+    // Check if the k is valid, for now max is 100
+    require!(
+        k <= 100,
+        crate::errors::ErrorCode::InvalidLeaderboardSizeLimit
     );
 
     // Check if the ATA account exists and has data
@@ -105,9 +122,21 @@ pub fn create_league(
     league.metadata_uri = metadata_uri;
     league.status = LeagueStatus::Pending;
     league.max_participants = max_participants;
-    league.bump = bump;
+    league.bump = ctx.bumps.league;
+
+    leaderboard.league = league.key();
+    leaderboard.k = k;
+    leaderboard.topk_equity = Vec::new();
+    leaderboard.topk_equity_scores = Vec::new();
+
+    leaderboard.topk_volume = Vec::new();
+    leaderboard.topk_volume_scores = Vec::new();
+
+    leaderboard.last_updated = Clock::get()?.unix_timestamp;
+    leaderboard.bump = ctx.bumps.leaderboard;
 
     msg!("League created: {:?}", league.key());
+
     Ok(())
 }
 

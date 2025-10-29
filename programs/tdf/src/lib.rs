@@ -44,6 +44,7 @@ pub mod tdf {
         virtual_on_deposit: i64,
         max_leverage: u8,
         nonce: u8,
+        k: u16,
     ) -> Result<()> {
         instructions::create_league(
             ctx,
@@ -56,6 +57,7 @@ pub mod tdf {
             virtual_on_deposit,
             max_leverage,
             nonce,
+            k,
         )
     }
 

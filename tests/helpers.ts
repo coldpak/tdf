@@ -69,11 +69,13 @@ export class TestHelpers {
     endTs: number,
     entryAmount: number,
     markets: PublicKey[],
+    leaderboardPDA: PublicKey,
     metadataUri: string,
     maxParticipants: number,
     virtualOnDeposit: number,
     maxLeverage: number,
-    nonce: number
+    nonce: number,
+    k: number = 50
   ): Promise<{ leaguePDA: PublicKey; tx: string }> {
     const leaguePDA = PublicKey.findProgramAddressSync(
       [
@@ -96,7 +98,8 @@ export class TestHelpers {
         maxParticipants,
         new BN(virtualOnDeposit),
         maxLeverage,
-        nonce
+        nonce,
+        k
       )
       .accounts({
         creator: creator.publicKey,
@@ -108,6 +111,7 @@ export class TestHelpers {
         associatedTokenProgram: new PublicKey(
           "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         ),
+        leaderboard: leaderboardPDA,
       } as any)
       .signers([creator])
       .rpc();
@@ -335,6 +339,44 @@ export class TestHelpers {
       priceFeedPDA
     );
     return priceFeed.price.toNumber();
+  }
+
+  // Refresh participant (updates leaderboard)
+  async refreshParticipant(
+    user: Keypair,
+    leaguePDA: PublicKey,
+    participantPDA: PublicKey,
+    leaderboardPDA: PublicKey,
+    positionPDAs: PublicKey[],
+    oracleFeedPDAs: PublicKey[]
+  ): Promise<string> {
+    const remainingAccounts = [];
+    for (let i = 0; i < positionPDAs.length; i++) {
+      remainingAccounts.push(positionPDAs[i]);
+      remainingAccounts.push(oracleFeedPDAs[i]);
+    }
+  
+    const tx = await this.program.methods
+      .refreshParticipant()
+      .accounts({
+        signer: user.publicKey,
+        participant: participantPDA,
+        leaderboard: leaderboardPDA,
+        user: user.publicKey,
+        league: leaguePDA,
+      } as any)
+      .remainingAccounts(
+        remainingAccounts.map((acc, index) => ({
+          pubkey: acc,
+          isWritable: index % 2 === 0, // Position accounts (even indices) are writable, oracle accounts (odd indices) are not
+          isSigner: false,
+        }))
+      )
+      .signers([user])
+      .rpc();
+
+    console.log("✅ Refresh participant tx:", tx);
+    return tx;
   }
 }
 

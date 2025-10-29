@@ -64,6 +64,8 @@
 //         leaguePDA
 //       );
 
+//       const leaderboardPDA = globalTestState.createLeaderboardPDA(leaguePDA);
+
 //       console.log("League PDA:", leaguePDA.toString());
 //       console.log("Reward Vault PDA:", rewardVaultPDA.toString());
 //       console.log(
@@ -78,6 +80,7 @@
 //         endTs,
 //         entryAmount,
 //         markets,
+//         leaderboardPDA,
 //         metadataUri,
 //         maxParticipants,
 //         virtualOnDeposit,
@@ -130,12 +133,15 @@
 //         nonce
 //       );
 
+//       const leaderboardPDA = globalTestState.createLeaderboardPDA(leaguePDA);
+
 //       const result = await testHelpers.createLeague(
 //         accounts.user1,
 //         startTs,
 //         endTs,
 //         entryAmount,
 //         markets,
+//         leaderboardPDA,
 //         metadataUri,
 //         maxParticipants,
 //         virtualOnDeposit,

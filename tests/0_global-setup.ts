@@ -26,6 +26,9 @@ export interface TestAccounts {
   admin: Keypair;
   user1: Keypair;
   user2: Keypair;
+  user3: Keypair;
+  user4: Keypair;
+  user5: Keypair;
   treasury: Keypair;
   permissionProgram: Keypair;
   oracleFeed: Keypair;
@@ -41,6 +44,7 @@ export interface TestPDAs {
   leaguePDA: PublicKey;
   participantPDA: PublicKey;
   positionPDA: PublicKey;
+  leaderboardPDA: PublicKey;
 }
 
 // Global test state
@@ -81,6 +85,9 @@ export class GlobalTestState {
       admin: Keypair.generate(),
       user1: Keypair.generate(),
       user2: Keypair.generate(),
+      user3: Keypair.generate(),
+      user4: Keypair.generate(),
+      user5: Keypair.generate(),
       treasury: Keypair.generate(),
       permissionProgram: Keypair.generate(),
       oracleFeed: Keypair.generate(),
@@ -92,6 +99,9 @@ export class GlobalTestState {
     console.log("Admin:", this._accounts.admin.publicKey.toString());
     console.log("User1:", this._accounts.user1.publicKey.toString());
     console.log("User2:", this._accounts.user2.publicKey.toString());
+    console.log("User3:", this._accounts.user3.publicKey.toString());
+    console.log("User4:", this._accounts.user4.publicKey.toString());
+    console.log("User5:", this._accounts.user5.publicKey.toString());
 
     // Airdrop SOL to test accounts
     console.log("💰 Airdropping SOL to test accounts...");
@@ -149,6 +159,18 @@ export class GlobalTestState {
       ),
       this._provider!.connection.requestAirdrop(
         this._accounts!.user2.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.user3.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.user4.publicKey,
+        TEST_CONFIG.AIRDROP_AMOUNT
+      ),
+      this._provider!.connection.requestAirdrop(
+        this._accounts!.user5.publicKey,
         TEST_CONFIG.AIRDROP_AMOUNT
       ),
       this._provider!.connection.requestAirdrop(
@@ -339,6 +361,13 @@ export class GlobalTestState {
         user.toBuffer(),
         seqNumBuffer,
       ],
+      this._program!.programId
+    )[0];
+  }
+
+  public createLeaderboardPDA(league: PublicKey): PublicKey {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("leaderboard"), league.toBuffer()],
       this._program!.programId
     )[0];
   }

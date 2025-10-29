@@ -48,4 +48,6 @@ pub enum ErrorCode {
     OracleMismatch,
     #[msg("Math overflow")]
     MathOverflow,
+    #[msg("Invalid leaderboard size limit")]
+    InvalidLeaderboardSizeLimit,
 }

@@ -1,4 +1,4 @@
-use crate::state::{League, Participant, Position};
+use crate::state::{Leaderboard, League, Participant, Position};
 use crate::utils::{
     calculate_notional, calculate_price_from_notional_and_size, calculate_unrealized_pnl,
     get_price_from_oracle,
@@ -16,6 +16,13 @@ pub struct RefreshParticipant<'info> {
       bump = participant.bump
     )]
     pub participant: Account<'info, Participant>,
+
+    #[account(
+      mut,
+      seeds = [b"leaderboard", league.key().as_ref()],
+      bump = leaderboard.bump
+    )]
+    pub leaderboard: Account<'info, Leaderboard>,
 
     /// CHECK: This account is validated by the participant account's user field
     pub user: AccountInfo<'info>,
@@ -184,7 +191,82 @@ pub fn refresh_participant<'info>(
         // Clear all positions after liquidation
         participant.positions.clear();
         participant.unrealized_pnl = 0;
+
         msg!("All positions liquidated. Participant equity reset.");
+    }
+
+    // Update leaderboard
+    let leaderboard = &mut ctx.accounts.leaderboard;
+    let participant_key = participant.key();
+    let equity = participant.equity();
+    let volume = participant.total_volume;
+
+    update_topk_equity(leaderboard, participant_key, equity)?;
+    update_topk_volume(leaderboard, participant_key, volume)?;
+
+    leaderboard.last_updated = Clock::get()?.unix_timestamp;
+
+    msg!(
+        "Leaderboard updated: last_updated: {}",
+        leaderboard.last_updated
+    );
+
+    Ok(())
+}
+
+fn update_topk_equity(leaderboard: &mut Leaderboard, key: Pubkey, score: i64) -> Result<()> {
+    let list = &mut leaderboard.topk_equity;
+    let scores = &mut leaderboard.topk_equity_scores;
+    update_topk_list(list, scores, key, score, leaderboard.k)
+}
+
+fn update_topk_volume(leaderboard: &mut Leaderboard, key: Pubkey, score: i64) -> Result<()> {
+    let list = &mut leaderboard.topk_volume;
+    let scores = &mut leaderboard.topk_volume_scores;
+    update_topk_list(list, scores, key, score, leaderboard.k)
+}
+
+fn update_topk_list(
+    list: &mut Vec<Pubkey>,
+    scores: &mut Vec<i64>,
+    key: Pubkey,
+    score: i64,
+    k: u16,
+) -> Result<()> {
+    // If k is 0, don't do anything
+    if k == 0 {
+        return Ok(());
+    }
+
+    // Create a new combined vector to avoid borrowing issues
+    let mut combined: Vec<(Pubkey, i64)> = Vec::new();
+
+    // Add existing entries
+    for (i, &addr) in list.iter().enumerate() {
+        if i < scores.len() {
+            combined.push((addr, scores[i]));
+        }
+    }
+
+    // Update or add the current entry
+    if let Some(pos) = combined.iter().position(|(addr, _)| *addr == key) {
+        combined[pos] = (key, score);
+    } else {
+        combined.push((key, score));
+    }
+
+    // Sort by score (descending)
+    combined.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Keep only top k entries
+    let topk = combined.into_iter().take(k as usize).collect::<Vec<_>>();
+
+    // Update the original vectors
+    list.clear();
+    scores.clear();
+    for (addr, sc) in topk {
+        list.push(addr);
+        scores.push(sc);
     }
 
     Ok(())

@@ -120,3 +120,17 @@ pub struct Position {
 
     pub bump: u8,
 }
+
+#[account]
+pub struct Leaderboard {
+    pub league: Pubkey,
+    pub k: u16, // top k participants, max is 50 for now
+    pub topk_equity: Vec<Pubkey>, // participant pubkeys
+    pub topk_equity_scores: Vec<i64>, // scores of top k participants
+
+    pub topk_volume: Vec<Pubkey>, // participant pubkeys
+    pub topk_volume_scores: Vec<i64>, // scores of top k participants
+
+    pub last_updated: i64,
+    pub bump: u8,
+}
