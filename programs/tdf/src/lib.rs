@@ -99,4 +99,9 @@ pub mod tdf {
     pub fn refresh_participant<'info>(ctx: Context<'_, '_, 'info, 'info, RefreshParticipant<'info>>) -> Result<()> {
         instructions::refresh_participant(ctx)
     }
+
+    // Claim reward instruction
+    pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
+        instructions::claim_reward(ctx)
+    }
 }

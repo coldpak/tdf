@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
-use anchor_spl::token::{Token};
+use anchor_spl::token::{Token, TokenAccount};
 
 use crate::state::{Leaderboard, League, LeagueStatus, Participant};
 
@@ -15,7 +15,7 @@ pub struct CreateLeague<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + (4 + 32 * 50) + 8 + 8 + 1 + 32 + 8 + 32 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
+        space = 8 + 32 + (4 + 32 * 50) + 8 + 8 + 1 + 32 + 8 + 32 + 8 + (4 + 200) + 1 + 4 + 8 + 1 + 1,
         seeds = [b"league", creator.key().as_ref(), &[nonce]],
         bump
     )]
@@ -119,6 +119,7 @@ pub fn create_league(
     league.max_leverage = max_leverage;
 
     league.reward_vault = ctx.accounts.reward_vault.key();
+    league.total_reward_amount = 0; // Will be set when league is closed
     league.metadata_uri = metadata_uri;
     league.status = LeagueStatus::Pending;
     league.max_participants = max_participants;
@@ -268,6 +269,8 @@ pub struct CloseLeague<'info> {
     #[account(mut)]
     pub league: Account<'info, League>,
 
+    pub reward_vault: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub user: Signer<'info>,
 }
@@ -290,8 +293,19 @@ pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
             crate::errors::ErrorCode::NotCreator
         );
     }
+
+    // Verify the reward vault matches the league's reward vault
+    require_keys_eq!(
+        ctx.accounts.reward_vault.key(),
+        league.reward_vault,
+        crate::errors::ErrorCode::InvalidRewardVault
+    );
+
+    // Fix the total reward amount at the time of closing
+    league.total_reward_amount = ctx.accounts.reward_vault.amount;
     league.status = LeagueStatus::Closed;
-    msg!("League {:?} closed!", league.key());
+    
+    msg!("League {:?} closed with total reward amount: {}", league.key(), league.total_reward_amount);
 
     Ok(())
 }

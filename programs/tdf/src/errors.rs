@@ -6,6 +6,10 @@ pub enum ErrorCode {
     InvalidRewardVault,
     #[msg("League is not active")]
     LeagueNotActive,
+    #[msg("League is not closed")]
+    LeagueNotClosed,
+    #[msg("League is not finalized")]
+    LeagueNotFinalized,
     #[msg("Insufficient entry amount")]
     InsufficientEntryAmount,
     #[msg("Invalid entry token mint")]
@@ -50,4 +54,10 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("Invalid leaderboard size limit")]
     InvalidLeaderboardSizeLimit,
+    #[msg("Already claimed")]
+    AlreadyClaimed,
+    #[msg("Not in top k")]
+    NotInTopK,
+    #[msg("Invalid reward amount")]
+    InvalidRewardAmount,
 }

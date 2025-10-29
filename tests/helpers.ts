@@ -171,12 +171,13 @@ export class TestHelpers {
   }
 
   // Close a league
-  async closeLeague(leaguePDA: PublicKey, user: Keypair): Promise<string> {
+  async closeLeague(leaguePDA: PublicKey, user: Keypair, rewardVaultAta: PublicKey): Promise<string> {
     const tx = await this.program.methods
       .closeLeague()
       .accounts({
         league: leaguePDA,
         user: user.publicKey,
+        rewardVault: rewardVaultAta,
       } as any)
       .signers([user])
       .rpc();
@@ -270,7 +271,7 @@ export class TestHelpers {
   }
 
   // Helper methods
-  private async getRewardVaultATA(leaguePDA: PublicKey): Promise<PublicKey> {
+  public async getRewardVaultATA(leaguePDA: PublicKey): Promise<PublicKey> {
     return await getAssociatedTokenAddress(
       this.accounts.entryTokenMint,
       leaguePDA,
@@ -322,10 +323,15 @@ export class TestHelpers {
       .signers([this.accounts.admin])
       .rpc();
 
-    console.log(`✅ Oracle price updated to: ${(newPrice / 1000000).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`);
+    console.log(
+      `✅ Oracle price updated to: ${(newPrice / 1000000).toLocaleString(
+        "en-US",
+        {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }
+      )}`
+    );
     return tx;
   }
 
@@ -355,7 +361,7 @@ export class TestHelpers {
       remainingAccounts.push(positionPDAs[i]);
       remainingAccounts.push(oracleFeedPDAs[i]);
     }
-  
+
     const tx = await this.program.methods
       .refreshParticipant()
       .accounts({
@@ -376,6 +382,33 @@ export class TestHelpers {
       .rpc();
 
     console.log("✅ Refresh participant tx:", tx);
+    return tx;
+  }
+
+  // Claim reward
+  async claimReward(
+    user: Keypair,
+    leaguePDA: PublicKey,
+    participantPDA: PublicKey,
+    leaderboardPDA: PublicKey,
+    rewardVaultATA: PublicKey,
+    participantATA: PublicKey
+  ): Promise<string> {
+    const tx = await this.program.methods
+      .claimReward()
+      .accounts({
+        league: leaguePDA,
+        leaderboard: leaderboardPDA,
+        participant: participantPDA,
+        rewardVault: rewardVaultATA,
+        participantAta: participantATA,
+        user: user.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      } as any)
+      .signers([user])
+      .rpc();
+
+    console.log("✅ Claim reward tx:", tx);
     return tx;
   }
 }
@@ -515,4 +548,11 @@ export function calculateExpectedNotional(
 ): number {
   const scale = Math.pow(10, decimals);
   return (price * size) / scale;
+}
+
+export function formatDollars(num: string) {
+  return (Number(num) / 1000000).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }

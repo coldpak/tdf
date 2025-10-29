@@ -33,6 +33,7 @@ pub struct League {
     pub entry_token_mint: Pubkey, // SPL token for entry fees, if SOL => wSOL
     pub entry_amount: i64,        // token amount to enter the league
     pub reward_vault: Pubkey,     // SPL token vault for rewards
+    pub total_reward_amount: u64, // Total reward amount fixed at close_league
 
     pub metadata_uri: String, // URI to the league metadata
     pub status: LeagueStatus,
