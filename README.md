@@ -86,14 +86,19 @@ Builders can extend the same commit flow to execute, hedge, or mirror live posit
 
 ## 🚧 Current Dev Status
 
--[x] Fully on-chain trading system core on Solana (see `programs/tdf`).
+- [x] Fully on-chain trading system core on Solana, heavy and messy (see `programs/tdf`).
 
--[x] Simple oracle price program implemented (see `programs/oracle`).
+- [x] Simple oracle price program implemented (see `programs/oracle`).
 
--[ ] ER lifecycle for `participant`/`position`: delegate → commit → undelegate (in progress).
--[ ] Leaderboard updates via MagicAction.
--[ ] Private ER for hidden positions + “pay to reveal”.
--[ ] Minimal frontend (shipping shortly for demo day).
+- [ ] ER lifecycle for `participant`/`position`: delegate → commit → undelegate (in progress).
+
+- [ ] Leaderboard updates via MagicAction.
+
+- [ ] Private ER for hidden positions + “pay to reveal”.
+
+- [ ] Minimal frontend
+
+- [ ] Connect SDKs for real position (e.g., DriftSDK)
 
 
 ### Local Development Quickstart
