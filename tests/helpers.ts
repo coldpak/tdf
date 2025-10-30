@@ -121,13 +121,23 @@ export class TestHelpers {
   }
 
   // Start a league
-  async startLeague(leaguePDA: PublicKey, user: Keypair): Promise<string> {
+  async startLeague(leaguePDA: PublicKey, leaderboardPDA: PublicKey, user: Keypair): Promise<string> {
+    console.log("League PDA:", leaguePDA.toString());
     const tx = await this.program.methods
       .startLeague()
       .accounts({
         league: leaguePDA,
+        leaderboard: leaderboardPDA,
         user: user.publicKey,
+        tdfProgram: this.program.programId,
       } as any)
+      .remainingAccounts([
+        {
+          pubkey: this.accounts.ERProgram,
+          isWritable: false,
+          isSigner: false,
+        },
+      ])
       .signers([user])
       .rpc();
 

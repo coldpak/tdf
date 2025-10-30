@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::anchor::ephemeral;
 
 mod errors;
 mod instructions;
@@ -7,6 +8,7 @@ mod utils;
 
 declare_id!("3jFHqM7VCceGLftStfrhLHHKRHBJZyteYuA5c63HXjuY");
 
+#[ephemeral]
 #[program]
 pub mod tdf {
     pub use super::instructions::*;
@@ -84,19 +86,21 @@ pub mod tdf {
         instructions::open_position(ctx, direction, size, leverage, seq_num)
     }
 
-    pub fn increase_position_size(
-        ctx: Context<IncreasePositionSize>,
-        size: i64,
-    ) -> Result<()> {
+    pub fn increase_position_size(ctx: Context<IncreasePositionSize>, size: i64) -> Result<()> {
         instructions::increase_position_size(ctx, size)
     }
 
-    pub fn decrease_position_size(ctx: Context<DecreasePositionSize>, size_to_close: i64) -> Result<()> {
+    pub fn decrease_position_size(
+        ctx: Context<DecreasePositionSize>,
+        size_to_close: i64,
+    ) -> Result<()> {
         instructions::decrease_position_size(ctx, size_to_close)
     }
 
     // Refresh participant instruction
-    pub fn refresh_participant<'info>(ctx: Context<'_, '_, 'info, 'info, RefreshParticipant<'info>>) -> Result<()> {
+    pub fn refresh_participant<'info>(
+        ctx: Context<'_, '_, 'info, 'info, RefreshParticipant<'info>>,
+    ) -> Result<()> {
         instructions::refresh_participant(ctx)
     }
 

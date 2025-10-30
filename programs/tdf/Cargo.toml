@@ -23,6 +23,7 @@ custom-panic = []
 [dependencies]
 anchor-lang = "0.32.1"
 anchor-spl = "0.32.1"
+ephemeral-rollups-sdk = { version = "0.3.7", features = ["anchor"] }
 
 
 [lints.rust]

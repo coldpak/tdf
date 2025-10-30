@@ -34,6 +34,7 @@ export interface TestAccounts {
   oracleFeed: Keypair;
   baseCurrency: Keypair;
   entryTokenMint: PublicKey;
+  ERProgram: PublicKey;
 }
 
 // Test PDAs interface
@@ -93,6 +94,7 @@ export class GlobalTestState {
       oracleFeed: Keypair.generate(),
       baseCurrency: Keypair.generate(),
       entryTokenMint: PublicKey.default, // Will be set after creation
+      ERProgram: new PublicKey("mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev"), // Local ephemeral rollups program
     };
 
     console.log("📝 Generated test accounts");
@@ -132,18 +134,42 @@ export class GlobalTestState {
       "SOL"
     );
 
-    // Initialize global state
-    console.log("🔮 Initializing global state...");
-    await this.initializeGlobalState();
-
-    // Deploy oracle program and initialize price feed
-    console.log("🔮 Setting up oracle program...");
-    await this.setupOracleProgram();
-
-    // Create entry token mint
-    console.log("🪙 Creating entry token mint...");
-    this._accounts.entryTokenMint = await this.createEntryTokenMint();
-
+    try {
+      // Initialize global state
+      console.log("🔮 Initializing global state...");
+      await this.initializeGlobalState();
+    } catch (error) {
+      if (error.message.includes("already in use")) {
+        console.log("Global state already initialized, skipping initialization");
+      } else {
+        console.error("❌ Failed to initialize global state:", error);
+        throw error;
+      }
+    }
+    try {
+      // Deploy oracle program and initialize price feed
+      console.log("🔮 Setting up oracle program...");
+      await this.setupOracleProgram();
+    } catch (error) {
+      if (error.message.includes("already in use")) {
+        console.log("Oracle program already initialized, skipping initialization");
+      } else {
+        console.error("❌ Failed to initialize oracle program:", error);
+        throw error;
+      }
+    }
+    try {
+      // Create entry token mint
+      console.log("🪙 Creating entry token mint...");
+      this._accounts.entryTokenMint = await this.createEntryTokenMint();
+    } catch (error) {
+      if (error.message.includes("already in use")) {
+        console.log("Entry token mint already created, skipping creation");
+      } else {
+        console.error("❌ Failed to create entry token mint:", error);
+        throw error;
+      }
+    }
     this._initialized = true;
   }
 
@@ -219,9 +245,8 @@ export class GlobalTestState {
         // Initialize price feed with initial price of 100000 (100.000 with 3 decimals)
         const initialPrice = 100_000_000; // 100.000 with 6 decimals
 
-        await this._oracleProgram.methods.initializePriceFeed(
-          new anchor.BN(initialPrice)
-        )
+        await this._oracleProgram.methods
+          .initializePriceFeed(new anchor.BN(initialPrice))
           .accounts({
             priceFeed: priceFeedPDA,
             authority: this._accounts.admin.publicKey,
