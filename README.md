@@ -128,6 +128,34 @@ yarn install
 anchor build
 ```
 
+### 📱 Mobile App (Expo)
+
+The repository includes a React Native app under `app/` built with Expo. It provides a minimal UI to connect a wallet, view account state, and interact with the on-chain programs.
+
+```bash
+# From the repo root
+cd app
+
+# Install app dependencies (uses npm)
+npm install
+
+# Start the Expo dev server
+npm run dev
+
+# Platform targets
+npm run ios     # run on iOS simulator (Xcode required)
+npm run android # run on Android emulator/device
+npm run web     # run in the browser
+
+# Quality
+npm run lint
+npm run fmt
+```
+
+- Uses `@solana-mobile/mobile-wallet-adapter` for wallet connections on mobile
+- Includes cluster switching and basic account/airdrop screens
+- See additional docs in `app/README.md`
+
 ### 🧪 Testing
 
 ```bash
