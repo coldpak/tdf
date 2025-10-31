@@ -1,4 +1,6 @@
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::anchor::{commit, delegate};
+use ephemeral_rollups_sdk::cpi::DelegateConfig;
 
 use crate::state::{Direction, League, LeagueStatus, Market, Participant, Position};
 use crate::utils::{
@@ -20,7 +22,7 @@ pub struct OpenPosition<'info> {
     pub participant: Account<'info, Participant>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = 8 + 32*5 + 8 + 1 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1,
         seeds = [b"position", league.key().as_ref(), user.key().as_ref(), participant.current_position_seq.to_le_bytes().as_ref()],
@@ -112,6 +114,34 @@ pub fn open_position(
     participant.positions.push(position.key());
 
     msg!("New position opened at price {}", current_price);
+    Ok(())
+}
+
+#[delegate]
+#[derive(Accounts)]
+#[instruction(league_key: Pubkey, seq_num: u64)]
+pub struct DelegatePosition<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(mut, del)]
+    pub pda: AccountInfo<'info>,
+}
+
+pub fn delegate_position(ctx: Context<DelegatePosition>, league_key: Pubkey, seq_num: u64) -> Result<()> {
+    ctx.accounts.delegate_pda(
+        &ctx.accounts.user,
+        &[
+            b"position",
+            league_key.as_ref(),
+            ctx.accounts.user.key().as_ref(),
+            seq_num.to_le_bytes().as_ref(),
+        ],
+        DelegateConfig {
+            validator: Some(pubkey!("mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev")),
+            ..Default::default()
+        },
+    )?;
     Ok(())
 }
 

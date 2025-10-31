@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{Token, TokenAccount};
 use ephemeral_rollups_sdk::anchor::{commit, delegate};
-use ephemeral_rollups_sdk::cpi::{delegate_account, DelegateAccounts, DelegateConfig};
+use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
 
 use crate::state::{Leaderboard, League, LeagueStatus, Participant};
@@ -237,89 +237,95 @@ pub fn join_league(ctx: Context<JoinLeague>, amount: i64) -> Result<()> {
     Ok(())
 }
 
-// Start league with delegation
 #[delegate]
+#[derive(Accounts)]
+pub struct DelegateParticipant<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(mut, del)]
+    /// CHECK: Participant pda to delegate
+    pub pda: AccountInfo<'info>,
+}
+
+pub fn delegate_participant(ctx: Context<DelegateParticipant>, league_key: Pubkey) -> Result<()> {
+    ctx.accounts.delegate_pda(
+        &ctx.accounts.user,
+        &[
+            b"participant",
+            league_key.as_ref(),
+            ctx.accounts.user.key().as_ref(),
+        ],
+        DelegateConfig {
+            validator: Some(pubkey!("mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev")),
+            ..Default::default()
+        },
+    )?;
+    Ok(())
+}
+
+#[commit]
+#[derive(Accounts)]
+#[instruction(league_key: Pubkey)]
+pub struct UndelegateParticipant<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(mut, seeds = [b"participant", league_key.as_ref(), user.key().as_ref()], bump = participant.bump)]
+    pub participant: Account<'info, Participant>,
+}
+
+pub fn undelegate_participant(ctx: Context<UndelegateParticipant>, _league_key: Pubkey) -> Result<()> {
+    commit_and_undelegate_accounts(
+        &ctx.accounts.user,
+        vec![&ctx.accounts.participant.to_account_info()],
+        &ctx.accounts.magic_context,
+        &ctx.accounts.magic_program,
+    )?;
+    Ok(())
+}
+
+// Start league with delegation
 #[derive(Accounts)]
 pub struct StartLeague<'info> {
     #[account(mut)]
     pub league: Account<'info, League>,
 
-    /// CHECK The leaderboard pda to delegate
-    #[account(mut, del)]
-    pub leaderboard: AccountInfo<'info>,
-
     #[account(mut)]
     pub user: Signer<'info>,
-
-    /// CHECK: TDF program - validated by the program
-    pub tdf_program: AccountInfo<'info>,
 }
 
 pub fn start_league(ctx: Context<StartLeague>) -> Result<()> {
-    {
-        let league = &mut ctx.accounts.league;
+    let league = &mut ctx.accounts.league;
 
-        // Check if the league is pending
+    // Check if the league is pending
+    require!(
+        league.status == LeagueStatus::Pending,
+        crate::errors::ErrorCode::InvalidStatus
+    );
+
+    // If start time is not reached, only creator can start the league
+    // But if start time is reached, anyone can start the league
+    let now = Clock::get()?.unix_timestamp;
+    if now < league.start_ts {
         require!(
-            league.status == LeagueStatus::Pending,
-            crate::errors::ErrorCode::InvalidStatus
+            ctx.accounts.user.key() == league.creator,
+            crate::errors::ErrorCode::NotCreator
         );
-
-        // If start time is not reached, only creator can start the league
-        // But if start time is reached, anyone can start the league
-        let now = Clock::get()?.unix_timestamp;
-        if now < league.start_ts {
-            require!(
-                ctx.accounts.user.key() == league.creator,
-                crate::errors::ErrorCode::NotCreator
-            );
-        }
-
-        league.status = LeagueStatus::Active;
-        msg!("League {:?} started!", league.key());
     }
 
-    // Delegate the leaderboard account
-    let league_key = ctx.accounts.league.key();
-    let leaderboard_seeds: &[&[u8]] = &[b"leaderboard", league_key.as_ref()];
-
-    let cpi_accounts = DelegateAccounts {
-        payer: &ctx.accounts.user,
-        pda: &ctx.accounts.leaderboard.to_account_info(),
-        owner_program: &ctx.accounts.tdf_program.to_account_info(),
-        buffer: &ctx.accounts.buffer_leaderboard,
-        delegation_record: &ctx.accounts.delegation_record_leaderboard,
-        delegation_metadata: &ctx.accounts.delegation_metadata_leaderboard,
-        delegation_program: &ctx.accounts.delegation_program,
-        system_program: &ctx.accounts.system_program,
-    };
-
-    delegate_account(
-        cpi_accounts,
-        leaderboard_seeds,
-        DelegateConfig {
-            validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
-            ..Default::default()
-        },
-    )?;
+    league.status = LeagueStatus::Active;
+    msg!("League {:?} started!", league.key());
 
     Ok(())
 }
 
-#[commit]
 #[derive(Accounts)]
 pub struct CloseLeague<'info> {
     #[account(mut)]
     pub league: Account<'info, League>,
 
     pub reward_vault: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        seeds = [b"leaderboard", league.key().as_ref()],
-        bump = leaderboard.bump
-    )]
-    pub leaderboard: Account<'info, Leaderboard>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -360,13 +366,6 @@ pub fn close_league(ctx: Context<CloseLeague>) -> Result<()> {
         league.key(),
         league.total_reward_amount
     );
-
-    commit_and_undelegate_accounts(
-        &ctx.accounts.user,
-        vec![&ctx.accounts.leaderboard.to_account_info()],
-        &ctx.accounts.magic_context,
-        &ctx.accounts.magic_program,
-    )?;
 
     Ok(())
 }

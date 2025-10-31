@@ -1,16 +1,37 @@
-# ⚡ TradeDotFun
+<p align="center">
+  <img src="https://github.com/tradedotfun/assets/blob/main/banner-cypherpunk-2025.png" width="100%" alt="TradeDotFun - Colosseum Cypherpunk 2025 Submission"/>
+</p>
 
-The Cyberpunk Trading League on Solana
+<h1 align="center">⚡ TradeDotFun</h1>
+<h3 align="center">The Cypherpunk Trading League on Solana</h3>
 
-> Real time, real gains — in a game that blurs the line between DeFi, gaming, and culture.
+<p align="center">
+  <i>Official submission for the <b>2025 Colosseum Cypherpunk Hackathon</b></i><br/>
+  <i>Exploring privacy, coordination, and profit on Solana</i>
+</p>
+
+<p align="center">
+  <a href="#features"><img src="https://img.shields.io/badge/Features-Ephemeral%20Rollups%20%7C%20MagicAction-blue"/></a>
+  <a href="#tech-stack"><img src="https://img.shields.io/badge/Stack-Solana%20%7C%20Anchor%20%7C%20Next.js-green"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"/></a>
+</p>
+
+---
 
 ## 🧠 Overview
 
-TradeDotFun is a **fully on-chain trading league** built on **Solana**, designed to make trading social, gamified, and profitable.<br/>
-We’re building a perp trading experience that blends RWA assets (like AAPL, GOLD) with crypto markets, under a structure that rewards bold moves, hidden insights, and perfect timing.
+TradeDotFun is a **fully on-chain trading league** built on **Solana**, designed to make trading **social, permissionless, and cypherpunk**.
 
-The system integrates **MagicBlock’s Ephemeral Rollups (ER) and MagicAction** for real-time state updates and privacy-preserving data control, turning on-chain trading into a living, evolving game.
+It merges **RWA assets (AAPL, GOLD)** with **crypto markets**, rewarding **bold moves, hidden insights, and perfect timing**.
 
+Built as part of the **Colosseum 2025 Cypherpunk Hackathon**,  
+TradeDotFun explores what it means to trade in a world where **privacy is alpha** and **information is money**.
+
+> 💡 **Real-time, real gains** — where the cypherpunk ethos meets Solana's performance.
+
+The system integrates **MagicBlock's Ephemeral Rollups (ER) and MagicAction** for real-time state updates and privacy-preserving data control, turning on-chain trading into a living, evolving game.
+
+---
 
 ## 🧩 Core Idea
 
@@ -18,114 +39,135 @@ The system integrates **MagicBlock’s Ephemeral Rollups (ER) and MagicAction** 
 
 TradeDotFun transforms the hardcore world of trading into a social game of prediction and coordination.
 
-- Compete in leagues with entry fees and fixed durations
+- **Compete** in leagues with entry fees and fixed durations
+- **Open and close** positions based on live oracles
+- **Watch** your rank change in real time
+- **Monetize** visibility through paid reveals for spectators and KOLs
 
-- Open and close positions based on live oracles
-
-- Watch your rank change in real time
-
-- Spectators and KOLs can monetize visibility through paid reveals
-
->It’s not just about making the right trade<br/>
-It’s about playing the market as performance art.
+> It's not just about making the right trade  
+> It's about playing the market as performance art.
 
 ### 💰 Monetization & Community
 
-- Trading KOLs can host private leagues for their followers
+- Trading **KOLs** can host private leagues for their followers
+- **Revenue share** from entry fees, reveal payments, or sponsorships
+- Leagues can become **self-contained micro economies** powered by participation and curiosity
 
-- Revenue share from entry fees, reveal payments, or sponsorships
-
-- Leagues can become self-contained micro economies powered by participation and curiosity
-
-This enables Cypherpunk-style monetization.<br/>
-not by ads or tokens, but through the value of hidden information.
+> **Cypherpunk-style monetization:**  
+> Not by ads or tokens, but through the value of hidden information.
 
 ### 🌍 RWA + Crypto Perp Trading
 
-We’re extending perps beyond crypto.<br/>
-Trade synthetic perpetuals for RWA assets such as GOLD, AAPL, or TESLA, powered by our custom Oracle program.
+We're extending perps beyond crypto.  
+Trade synthetic perpetuals for **RWA assets** such as **GOLD, AAPL, or TESLA**, powered by our custom Oracle program.
 
-This bridges traditional markets and DeFi into a single game layer, a cyberpunk fusion of Web2 and Web3 value systems.
+This bridges traditional markets and DeFi into a single game layer, a cypherpunk fusion of Web2 and Web3 value systems.
 
->Simulate Wall Street’s tickers inside Solana’s runtime.<br/>
-Trade the world, stay on-chain.
+> Simulate Wall Street's tickers inside Solana's runtime.  
+> Trade the world, stay on-chain.
 
+---
 
 ## ⚙️ Technical Features
 
-### 1. Hierarchical Optimized Updates (powered by MagicAction)
+### 1. Hierarchical Optimized Updates
+**Powered by MagicAction**
+
 Real-time for players. Deliberate for the system.
-- Delegated `participant` and `position` update reactively in ER utilizing real-time oracle.
-- On commit, we invoke MagicAction to cascade updates to other programs (e.g., `league` leaderboards, public stats), keeping hot paths fast and heavy aggregations off the critical path.
->Separate the “live state” from the “final state” and sync them efficiently.
 
-### 2. Private ER + Pay-to-Reveal (powered by Private ER)
-- Hide position internals in the private ER; only publish allowed fields (PnL, aggregates) via commit-time MagicAction.
-- Users can pay to reveal a position or subscribe to a community for access. This creates a viable path to monetize strategies while preserving composability.
+- Delegated `participant` and `position` update reactively in ER utilizing real-time oracle
+- On commit, we invoke **MagicAction** to cascade updates to other programs (e.g., `league` leaderboards, public stats), keeping hot paths fast and heavy aggregations off the critical path
 
-> Curiosity itself becomes monetizable.<br/>
-Alpha turns into a micro-economy.
+> Separate the **"live state"** from the **"final state"** and sync them efficiently.
+
+### 2. Private ER + Pay-to-Reveal
+**Powered by Private ER**
+
+- Hide position internals in the private ER; only publish allowed fields (PnL, aggregates) via commit-time MagicAction
+- Users can **pay to reveal** a position or subscribe to a community for access
+- This creates a viable path to monetize strategies while preserving composability
+
+> **Curiosity itself becomes monetizable.**  
+> Alpha turns into a micro-economy.
 
 ### 3. From Simulation to Execution
 
-TradeDotFun can seamlessly connect to Solana DEXs such as Jupiter, Drift, or Meteora, allowing simulated trades to evolve into real market executions.
+TradeDotFun can seamlessly connect to **Solana DEXs** such as Jupiter, Drift, or Meteora, allowing simulated trades to evolve into real market executions.
 
-This makes TradeDotFun more than a paper-trading game.<br/>It’s an on-chain liquidity sandbox, ready to plug into Solana’s DeFi primitives.
+This makes TradeDotFun more than a paper-trading game.  
+It's an **on-chain liquidity sandbox**, ready to plug into Solana's DeFi primitives.
 
 Builders can extend the same commit flow to execute, hedge, or mirror live positions directly within the Solana ecosystem.
 
->A pathway from play to profit - powered by Solana.
+> A pathway from **play to profit** — powered by Solana.
 
 ---
 
 ## 🏗️ Architecture
 
+```
 (Diagram Placeholder)
+```
 
 ---
 
-## 🚧 Current Dev Status
+## 🚀 Getting Started
 
-- [x] Fully on-chain trading system core on Solana, heavy and messy (see `programs/tdf`).
+### 📋 Prerequisites
 
-- [x] Simple oracle price program implemented (see `programs/oracle`).
+- **Rust** + Cargo
+- **Solana CLI**
+- **Node.js** + Yarn
+- **Anchor CLI**
 
-- [ ] ER lifecycle for `participant`/`position`: delegate → commit → undelegate (in progress).
+### 🔧 Installation
 
-- [ ] Leaderboard updates via MagicAction.
-
-- [ ] Private ER for hidden positions + “pay to reveal”.
-
-- [ ] Minimal frontend
-
-- [ ] Connect SDKs for real position (e.g., DriftSDK)
-
-
-### Local Development Quickstart
-Prereqs
-- Rust + Cargo, Solana CLI, Node.js + Yarn, Anchor CLI
-
-Install deps
 ```bash
+# Install dependencies
 yarn install
-```
 
-Build programs
-```bash
+# Build programs
 anchor build
 ```
 
-Run tests
+### 🧪 Testing
+
 ```bash
+# Run tests
 yarn test
 ```
 
-Notes
-- IDLs are generated under `target/idl/`.
-- Type bindings under `target/types/` (e.g., `tdf.ts`, `oracle.ts`).
-- Example local ledgers are included under `test-ledger/` and `test-ledger-magicblock/` for faster iteration.
+### 📝 Notes
 
-### License
-MIT
+- IDLs are generated under `target/idl/`
+- Type bindings under `target/types/` (e.g., `tdf.ts`, `oracle.ts`)
+- Example local ledgers are included under `test-ledger/` and `test-ledger-magicblock/` for faster iteration
 
+---
 
+## 🚧 Development Status
+
+### ✅ Completed
+
+- [x] Fully on-chain trading system core on Solana (see `programs/tdf`)
+- [x] Simple oracle price program implemented (see `programs/oracle`)
+
+### 🚧 In Progress
+
+- [ ] ER lifecycle for `participant`/`position`: delegate → commit → undelegate
+- [ ] Leaderboard updates via MagicAction
+- [ ] Private ER for hidden positions + "pay to reveal"
+- [ ] Minimal frontend
+- [ ] Connect SDKs for real position (e.g., DriftSDK)
+
+---
+
+## 📄 License
+
+**MIT**
+
+---
+
+<p align="center">
+  <i>Built with ⚡ by the TradeDotFun team</i>
+</p>

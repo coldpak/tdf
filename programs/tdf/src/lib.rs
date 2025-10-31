@@ -67,6 +67,14 @@ pub mod tdf {
         instructions::join_league(ctx, amount)
     }
 
+    pub fn delegate_participant(ctx: Context<DelegateParticipant>, league_key: Pubkey) -> Result<()> {
+        instructions::delegate_participant(ctx, league_key)
+    }
+
+    pub fn undelegate_participant(ctx: Context<UndelegateParticipant>, league_key: Pubkey) -> Result<()> {
+        instructions::undelegate_participant(ctx, league_key)
+    }
+
     pub fn start_league(ctx: Context<StartLeague>) -> Result<()> {
         instructions::start_league(ctx)
     }
@@ -84,6 +92,10 @@ pub mod tdf {
         seq_num: u64,
     ) -> Result<()> {
         instructions::open_position(ctx, direction, size, leverage, seq_num)
+    }
+
+    pub fn delegate_position(ctx: Context<DelegatePosition>, league_key: Pubkey, seq_num: u64) -> Result<()> {
+        instructions::delegate_position(ctx, league_key, seq_num)
     }
 
     pub fn increase_position_size(ctx: Context<IncreasePositionSize>, size: i64) -> Result<()> {

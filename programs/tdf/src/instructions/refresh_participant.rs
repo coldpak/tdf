@@ -4,7 +4,13 @@ use crate::utils::{
     get_price_from_oracle,
 };
 use anchor_lang::prelude::*;
+use anchor_lang::Discriminator;
+use ephemeral_rollups_sdk::anchor::commit;
+use ephemeral_rollups_sdk::ephem::{CallHandler, CommitType, MagicAction, MagicInstructionBuilder};
+use ephemeral_rollups_sdk::{ActionArgs, ShortAccountMeta};
 
+/// Use MagicAction to update the leaderboard on commit
+/// TODO: split UpdateLeaderboard and CommitAndUpdateLeaderboard instructions to apply MagicAction
 #[derive(Accounts)]
 pub struct RefreshParticipant<'info> {
     #[account(mut)]
@@ -18,18 +24,20 @@ pub struct RefreshParticipant<'info> {
     pub participant: Account<'info, Participant>,
 
     #[account(
-      mut,
-      seeds = [b"leaderboard", league.key().as_ref()],
-      bump = leaderboard.bump
+        mut,
+        seeds = [b"leaderboard", league.key().as_ref()],
+        bump = leaderboard.bump
     )]
     pub leaderboard: Account<'info, Leaderboard>,
 
     /// CHECK: This account is validated by the participant account's user field
     pub user: AccountInfo<'info>,
     pub league: Account<'info, League>,
+
     // remaining accounts = [position_index_0, oracle_0, position_index_1, oracle_1, ...]
 }
 
+/// commit and update leaderboard
 pub fn refresh_participant<'info>(
     ctx: Context<'_, '_, 'info, 'info, RefreshParticipant<'info>>,
 ) -> Result<()> {
