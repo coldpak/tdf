@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/tradedotfun/assets/blob/main/banner-cypherpunk-2025.png" width="100%" alt="TradeDotFun - Colosseum Cypherpunk 2025 Submission"/>
+<img width="1329" height="600" alt="image" src="https://github.com/user-attachments/assets/ea932ed5-7446-4436-b552-688a9c24249b" />
 </p>
 
 <h1 align="center">⚡ TradeDotFun</h1>
@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="#features"><img src="https://img.shields.io/badge/Features-Ephemeral%20Rollups%20%7C%20MagicAction-blue"/></a>
-  <a href="#tech-stack"><img src="https://img.shields.io/badge/Stack-Solana%20%7C%20Anchor%20%7C%20Next.js-green"/></a>
+  <a href="#tech-stack"><img src="https://img.shields.io/badge/Stack-Solana%20%7C%20Anchor%20%7C%20ReactNative-green"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"/></a>
 </p>
 
@@ -105,9 +105,7 @@ Builders can extend the same commit flow to execute, hedge, or mirror live posit
 
 ## 🏗️ Architecture
 
-```
-(Diagram Placeholder)
-```
+<img width="865" height="628" alt="image" src="https://github.com/user-attachments/assets/981c200e-7f97-47f9-a876-f71dbf0d2e44" />
 
 ---
 
