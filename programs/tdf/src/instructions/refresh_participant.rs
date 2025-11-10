@@ -4,10 +4,6 @@ use crate::utils::{
     get_price_from_oracle,
 };
 use anchor_lang::prelude::*;
-use anchor_lang::Discriminator;
-use ephemeral_rollups_sdk::anchor::commit;
-use ephemeral_rollups_sdk::ephem::{CallHandler, CommitType, MagicAction, MagicInstructionBuilder};
-use ephemeral_rollups_sdk::{ActionArgs, ShortAccountMeta};
 
 /// Use MagicAction to update the leaderboard on commit
 /// TODO: split UpdateLeaderboard and CommitAndUpdateLeaderboard instructions to apply MagicAction

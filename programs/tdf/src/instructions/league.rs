@@ -153,7 +153,7 @@ pub struct JoinLeague<'info> {
     pub league: Account<'info, League>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 8 + 2 + 2 + 8 + (4 + 32 * 10) + 1,
         seeds = [b"participant", league.key().as_ref(), user.key().as_ref()],
@@ -257,7 +257,7 @@ pub fn delegate_participant(ctx: Context<DelegateParticipant>, league_key: Pubke
             ctx.accounts.user.key().as_ref(),
         ],
         DelegateConfig {
-            validator: Some(pubkey!("mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev")),
+            validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
             ..Default::default()
         },
     )?;

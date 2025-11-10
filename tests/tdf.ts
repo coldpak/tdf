@@ -119,70 +119,70 @@ describe("TDF", () => {
     console.log("Leaderboard PDA:", leaderboardPDA.toString());
   });
 
-  // it("Create League", async () => {
-  //   console.log("Creating League...");
-  //   const startTs = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-  //   const endTs = startTs + 86400; // 24 hours later
-  //   const entryAmount = new anchor.BN(1000000); // 1 token (6 decimals)
-  //   const markets = [marketPDA];
-  //   const metadataUri = "https://example.com/league-metadata";
-  //   const maxParticipants = 100;
-  //   const virtualOnDeposit = new anchor.BN(1000000000); // 1 billion (1e9)
-  //   const maxLeverage = 20;
-  //   const nonce = 0;
-  //   const k = 50;
+  it("Create League", async () => {
+    console.log("Creating League...");
+    const startTs = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+    const endTs = startTs + 86400; // 24 hours later
+    const entryAmount = new anchor.BN(1000000); // 1 token (6 decimals)
+    const markets = [marketPDA];
+    const metadataUri = "https://example.com/league-metadata";
+    const maxParticipants = 100;
+    const virtualOnDeposit = new anchor.BN(1000000000); // 1 billion (1e9)
+    const maxLeverage = 20;
+    const nonce = 0;
+    const k = 50;
 
-  //   try {
-  //     let createLeagueTx = await program.methods
-  //       .createLeague(
-  //         new anchor.BN(startTs),
-  //         new anchor.BN(endTs),
-  //         entryAmount,
-  //         markets,
-  //         metadataUri,
-  //         maxParticipants,
-  //         virtualOnDeposit,
-  //         maxLeverage,
-  //         nonce,
-  //         k
-  //       )
-  //       .accounts({
-  //         creator: admin.publicKey,
-  //         league: leaguePDA,
-  //         leaderboard: leaderboardPDA,
-  //         entryTokenMint: entryTokenMint,
-  //         rewardVault: rewardVaultAta,
-  //         systemProgram: anchor.web3.SystemProgram.programId,
-  //         tokenProgram: TOKEN_PROGRAM_ID,
-  //         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-  //       } as any)
-  //       .signers([admin.payer])
-  //       .rpc();
-  //     console.log("Create League Tx:", createLeagueTx.toString());
-  //   } catch (error: any) {
-  //     const logs = error?.logs || error?.simulationResponse?.logs;
-  //     if (logs) console.error("Create league logs:\n", logs);
-  //     throw error;
-  //   }
+    try {
+      let createLeagueTx = await program.methods
+        .createLeague(
+          new anchor.BN(startTs),
+          new anchor.BN(endTs),
+          entryAmount,
+          markets,
+          metadataUri,
+          maxParticipants,
+          virtualOnDeposit,
+          maxLeverage,
+          nonce,
+          k
+        )
+        .accounts({
+          creator: admin.publicKey,
+          league: leaguePDA,
+          leaderboard: leaderboardPDA,
+          entryTokenMint: entryTokenMint,
+          rewardVault: rewardVaultAta,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        } as any)
+        .signers([admin.payer])
+        .rpc();
+      console.log("Create League Tx:", createLeagueTx.toString());
+    } catch (error: any) {
+      const logs = error?.logs || error?.simulationResponse?.logs;
+      if (logs) console.error("Create league logs:\n", logs);
+      throw error;
+    }
 
-  //   // Optionally verify league exists
-  //   const league = await program.account.league.fetch(leaguePDA);
-  //   expect(league.creator.toString()).to.equal(admin.publicKey.toString());
-  // });
+    // Optionally verify league exists
+    const league = await program.account.league.fetch(leaguePDA);
+    expect(league.creator.toString()).to.equal(admin.publicKey.toString());
+  });
 
-  // it("Start league", async () => {
-  //   console.log("Starting league...");
-  //   let startLeagueTx = await program.methods
-  //     .startLeague()
-  //     .accounts({
-  //       payer: admin.publicKey,
-  //       league: leaguePDA,
-  //     } as any)
-  //     .signers([admin.payer])
-  //     .rpc();
+  it("Start league", async () => {
+    console.log("Starting league...");
+    let startLeagueTx = await program.methods
+      .startLeague()
+      .accounts({
+        payer: admin.publicKey,
+        league: leaguePDA,
+      } as any)
+      .signers([admin.payer])
+      .rpc();
 
-  //   console.log("Start League Tx:", startLeagueTx.toString());
-  // });
+    console.log("Start League Tx:", startLeagueTx.toString());
+  });
 
   it("Delegate leaderboard", async () => {
     console.log("Delegate leaderboard...");
